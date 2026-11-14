@@ -1,0 +1,118 @@
+* { box-sizing: border-box; }
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: #f4f6f8;
+  color: #222;
+}
+
+.test-main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* .wrap { max-width: 860px; margin: 0 auto; padding: 16px; } */
+.card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+h1 { font-size: 22px; margin: 0 0 12px; }
+h2 { font-size: 18px; margin: 0 0 10px; }
+hr { border: 0; border-top: 1px solid #eee; margin: 14px 0; }
+label { display: block; margin: 10px 0 4px; font-weight: bold; font-size: 14px; }
+input, select {
+  width: 100%; padding: 8px; font-size: 15px;
+  border: 1px solid #ccc; border-radius: 4px;
+}
+button {
+  padding: 10px 18px; font-size: 15px; border: 0;
+  border-radius: 4px; cursor: pointer;
+  background: #2c7be5; color: #fff;
+}
+button:hover { background: #1a5fc0; }
+button.secondary { background: #6c757d; }
+button.secondary:hover { background: #565e64; }
+button.success { background: #2e7d32; }
+button.success:hover { background: #1b5e20; }
+button.danger { background: #d9534f; }
+button.danger:hover { background: #b03a36; }
+button:disabled { background: #b0b8c1; cursor: not-allowed; }
+
+.muted { color: #666; font-size: 13px; }
+.small-mb { margin-bottom: 8px; }
+.bad-text { color: #c62828; }
+.ok-text { color: #2e7d32; }
+.hidden { display: none !important; }
+
+.row-buttons { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+
+/* --- Шапка теста --- */
+.test-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.who b { font-size: 15px; }
+.timer-box { font-size: 15px; }
+.timer { font-size: 20px; font-weight: bold; color: #d9534f; }
+.timer.ok { color: #2c7be5; }
+
+/* --- Счётчик и прогресс --- */
+.counter-row {
+  display: flex; align-items: center; gap: 14px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.counter-row > span { font-size: 15px; white-space: nowrap; }
+.progress {
+  flex: 1; min-width: 120px; height: 8px;
+  background: #e6e9ee; border-radius: 4px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0;
+  background: #2c7be5; transition: width .25s ease;
+}
+
+/* --- Вопрос --- */
+.q-text {
+  font-size: 17px; line-height: 1.45;
+  font-weight: bold; margin-bottom: 14px;
+}
+.ans {
+  display: block; padding: 10px 12px;
+  border: 1px solid #e3e7ed; border-radius: 6px;
+  cursor: pointer; margin: 6px 0;
+  background: #fff; transition: background .15s, border-color .15s;
+}
+.ans:hover { background: #f0f4fa; border-color: #c8d6ea; }
+.ans.selected { border-color: #2c7be5; background: #eaf1fb; }
+.ans input { width: auto; margin-right: 10px; vertical-align: middle; }
+.ans.correct { background: #e6f4ea; border-color: #8fd19e; }
+.ans.wrong { background: #fdecea; border-color: #f0a3a0; }
+
+/* --- Навигация --- */
+.nav-buttons {
+  display: flex; gap: 12px; align-items: center;
+  flex-wrap: wrap; margin-top: 20px;
+}
+.nav-buttons .secondary { margin-right: auto; }
+
+/* --- Результат --- */
+.result-grid { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.result-big { font-size: 44px; font-weight: bold; line-height: 1.05; }
+.verdict { font-size: 22px; font-weight: bold; }
+
+/* --- Таблица --- */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+th { background: #f0f2f5; }
+
+/* --- Мобильное --- */
+@media (max-width: 600px) {
+  .wrap { padding: 10px; }
+  .card { padding: 14px; }
+  .result-big { font-size: 34px; }
+  .timer { font-size: 18px; }
+  .nav-buttons { flex-direction: column-reverse; align-items: stretch; }
+  .nav-buttons button { width: 100%; }
+  .nav-buttons .secondary { margin-right: 0; }
+}
