@@ -112,8 +112,8 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
   // ====== РЕГИСТРАЦИЯ ======
   function initRegScreen() {
     $("test-title").textContent = test.Name || "Тест";
-    var instr = (test.Instructions || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    $("test-instr").textContent = instr;
+    // var instr = (test.Instructions || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    // $("test-instr").textContent = instr;
 
     var orgSel = $("org");
     orgSel.innerHTML = '<option value="">— выберите —</option>';
@@ -365,8 +365,11 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       })
     }).catch(err => console.error('Ошибка отправки на сервер:', err));
 
-    saveResult(record);
-    localStorage.removeItem(STORAGE_SESSION);
+    try {
+      localStorage.removeItem(STORAGE_SESSION);
+      localStorage.removeItem(STORAGE_RESULTS);
+    } catch (e) {}
+
     showResult(record);
   }
 
@@ -396,7 +399,7 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
           '<div class="result-big">' + rec.percent + "%</div></div>" +
         "<div>" + verdict + "</div>" +
       "</div>" +
-      '<div class="muted" style="margin-top:12px">' +
+      '<div class="muted_inf" style="margin-top:12px">' +
         "ФИО: " + escapeHtml(rec.fio) + "<br>" +
         "Орган: " + escapeHtml(rec.org) + "<br>" +
         "Начало: " + new Date(rec.startedAt).toLocaleString() + "<br>" +

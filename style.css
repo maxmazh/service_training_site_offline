@@ -15,12 +15,14 @@ h1 {
     font-size: 32px;
     margin-bottom: 20px;
     text-align: center;
+    font-weight: 400;
 }
 
 h2 {
     margin-bottom: 20px;
     text-align: center;
     line-height: 1.2;
+    font-weight: 400;
 }
 
 .wallpaper_btn {
@@ -94,4 +96,9 @@ nav {
     padding: 10.7px 24px;
     border: none;
     cursor: pointer;
+}
+
+.img_title {
+    width: 100%;
+    margin-bottom: 20px;
 }

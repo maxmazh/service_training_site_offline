@@ -23,13 +23,13 @@ body {
 h1 { font-size: 22px; margin: 0 0 12px; }
 h2 { font-size: 18px; margin: 0 0 10px; }
 hr { border: 0; border-top: 1px solid #eee; margin: 14px 0; }
-label { display: block; margin: 10px 0 4px; font-weight: bold; font-size: 14px; }
+label { display: block; margin: 10px 0 4px; font-weight: 400; font-size: 14px; }
 input, select {
   width: 100%; padding: 8px; font-size: 15px;
   border: 1px solid #ccc; border-radius: 4px;
 }
 button {
-  padding: 10px 18px; font-size: 15px; border: 0;
+  padding: 11px 24px; font-size: 15px; border: 0;
   border-radius: 4px; cursor: pointer;
   background: #2c7be5; color: #fff;
 }
@@ -43,6 +43,8 @@ button.danger:hover { background: #b03a36; }
 button:disabled { background: #b0b8c1; cursor: not-allowed; }
 
 .muted { color: #666; font-size: 13px; }
+.muted_inf { color: #666; font-size: 18px; }
+.heading {color: #222; font-size: 14px;}
 .small-mb { margin-bottom: 8px; }
 .bad-text { color: #c62828; }
 .ok-text { color: #2e7d32; }
