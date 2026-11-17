@@ -216,6 +216,7 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     if (state.currentIndex > 0) {
       state.currentIndex--;
       renderCurrentQuestion();
+      saveSession();
     }
   }
 
@@ -228,6 +229,7 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     if (state.currentIndex < state.questions.length - 1) {
       state.currentIndex++;
       renderCurrentQuestion();
+      saveSession();
     }
   }
 
@@ -350,20 +352,29 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       details: details
     };
 
-    fetch('/api/save-result', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-        testName: test.Name || 'Неизвестный тест', // Название берется из test.js
-        fio: record.fio,
-        org: record.org,
-        score: record.score,
-        total: record.total,
-        percent: record.percent,
-        passed: record.passed,
-        spentSec: record.spentSec
-      })
-    }).catch(err => console.error('Ошибка отправки на сервер:', err));
+    try {
+      var payload = JSON.stringify({
+          testName: test.Name || 'Неизвестный тест',
+          fio: record.fio,
+          org: record.org,
+          score: record.score,
+          total: record.total,
+          percent: record.percent,
+          passed: record.passed,
+          spentSec: record.spentSec
+      });
+      if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/save-result',
+              new Blob([payload], { type: 'application/json' }));
+      } else {
+          fetch('/api/save-result', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              keepalive: true
+          }).catch(function (err) { console.error('Ошибка отправки:', err); });
+      }
+    } catch (e) {}
 
     try {
       localStorage.removeItem(STORAGE_SESSION);
@@ -384,6 +395,7 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     try { localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr)); } catch (e) {}
   }
 
+
   function showResult(rec) {
     showScreen("screen-result");
 
@@ -391,7 +403,25 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       ? '<div class="verdict ok-text">Удовлетворительно</div>'
       : '<div class="verdict bad-text">Неудовлетворительно</div>';
 
+    // Класс для шкалы и подписи
+    var scaleClass = rec.passed ? "good" : "bad";
+    var scaleLabel = rec.passed ? "удовлетворительно" : "неудовлетворительно";
+
     var html =
+      // --- Шкала результата ---
+      '<div class="score-scale">' +
+        '<div class="score-scale__labels"><span>0%</span><span>100%</span></div>' +
+        '<div class="score-scale__track">' +
+          '<div class="score-scale__fill ' + scaleClass + '" style="width:' + rec.percent + '%"></div>' +
+          '<div class="score-scale__threshold"></div>' +
+        '</div>' +
+        // '<div class="score-scale__threshold-label">порог 80%</div>' +
+        '<div class="score-scale__value ' + scaleClass + '">' +
+          rec.percent + '% — ' + scaleLabel +
+        '</div>' +
+      '</div>' +
+
+      // --- Блок с цифрами ---
       '<div class="result-grid">' +
         '<div><div class="muted">Правильных ответов</div>' +
           '<div class="result-big">' + rec.score + " / " + rec.total + "</div></div>" +
@@ -399,15 +429,20 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
           '<div class="result-big">' + rec.percent + "%</div></div>" +
         "<div>" + verdict + "</div>" +
       "</div>" +
+
+      // --- Информация о тесте ---
       '<div class="muted_inf" style="margin-top:12px">' +
         "ФИО: " + escapeHtml(rec.fio) + "<br>" +
         "Орган: " + escapeHtml(rec.org) + "<br>" +
         "Начало: " + new Date(rec.startedAt).toLocaleString() + "<br>" +
         "Окончание: " + new Date(rec.finishedAt).toLocaleString() + "<br>" +
         "Потрачено: " + fmtDuration(rec.spentSec) +
-        (rec.timeUp ? " (время вышло)" : "") +
+        (rec.timeUp ? " (время вышло)" : "") + "<br>" + "<br>" +
+        "Удовлетворительно, если набрали 80% и более" + "<br>" +
+        "Неудовлетворительно, если менее 80%"
       "</div>";
 
+    // --- Разбор ответов ---
     html += '<details style="margin-top:16px"><summary style="cursor:pointer">Показать мои ответы</summary>';
     rec.details.forEach(function (d) {
       html += '<div class="q"><div class="q-text">' + d.number + ". " + escapeHtml(d.text) + "</div>";
@@ -423,6 +458,46 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
 
     $("result-body").innerHTML = html;
   }
+
+  // function showResult(rec) {
+  //   showScreen("screen-result");
+
+  //   var verdict = rec.passed
+  //     ? '<div class="verdict ok-text">Удовлетворительно</div>'
+  //     : '<div class="verdict bad-text">Неудовлетворительно</div>';
+
+  //   var html =
+  //     '<div class="result-grid">' +
+  //       '<div><div class="muted">Правильных ответов</div>' +
+  //         '<div class="result-big">' + rec.score + " / " + rec.total + "</div></div>" +
+  //       '<div><div class="muted">Процент</div>' +
+  //         '<div class="result-big">' + rec.percent + "%</div></div>" +
+  //       "<div>" + verdict + "</div>" +
+  //     "</div>" +
+  //     '<div class="muted_inf" style="margin-top:12px">' +
+  //       "ФИО: " + escapeHtml(rec.fio) + "<br>" +
+  //       "Орган: " + escapeHtml(rec.org) + "<br>" +
+  //       "Начало: " + new Date(rec.startedAt).toLocaleString() + "<br>" +
+  //       "Окончание: " + new Date(rec.finishedAt).toLocaleString() + "<br>" +
+  //       "Потрачено: " + fmtDuration(rec.spentSec) +
+  //       (rec.timeUp ? " (время вышло)" : "") +
+  //     "</div>";
+
+  //   html += '<details style="margin-top:16px"><summary style="cursor:pointer">Показать мои ответы</summary>';
+  //   rec.details.forEach(function (d) {
+  //     html += '<div class="q"><div class="q-text">' + d.number + ". " + escapeHtml(d.text) + "</div>";
+  //     d.answers.forEach(function (a) {
+  //       var cls = "ans";
+  //       if (d.rightIds.indexOf(a.id) !== -1) cls += " correct";
+  //       else if (d.chosenId === a.id) cls += " wrong";
+  //       html += '<div class="' + cls + '">' + escapeHtml(a.text) + "</div>";
+  //     });
+  //     html += "</div>";
+  //   });
+  //   html += "</details>";
+
+  //   $("result-body").innerHTML = html;
+  // }
 
   function showList() {
     showScreen("screen-list");
@@ -480,7 +555,8 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     URL.revokeObjectURL(url);
   }
 
-  // ====== ИНИЦИАЛИЗАЦИЯ ======
+
+    // ====== ИНИЦИАЛИЗАЦИЯ ======
   function init() {
     if (!window.test) {
       document.body.innerHTML =
@@ -490,27 +566,35 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
 
     initRegScreen();
 
-    $("btn-start").onclick = startTest;
-    $("btn-prev").onclick = goPrev;
-    $("btn-next").onclick = goNext;
-    $("btn-finish").onclick = function () { finishTest(false); };
+    // Безопасное навешивание обработчика: если элемента нет — не падаем
+    function bind(id, handler) {
+      var el = $(id);
+      if (el) el.onclick = handler;
+    }
 
-    $("btn-again").onclick = function () {
-      localStorage.removeItem(STORAGE_SESSION);
+    bind("btn-start", startTest);
+    bind("btn-prev", goPrev);
+    bind("btn-next", goNext);
+    bind("btn-finish", function () { finishTest(false); });
+
+    bind("btn-again", function () {
+      try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
       location.reload();
-    };
-    $("btn-view-results").onclick = showList;
-    $("btn-back").onclick = function () {
+    });
+    bind("btn-view-results", showList);
+    bind("btn-back", function () {
       showScreen("screen-result");
-    };
-    $("btn-export").onclick = exportCsv;
-    $("btn-clear").onclick = function () {
+    });
+    bind("btn-export", exportCsv);
+    bind("btn-clear", function () {
       if (confirm("Удалить все сохранённые результаты?")) {
-        localStorage.removeItem(STORAGE_RESULTS);
+        try { localStorage.removeItem(STORAGE_RESULTS); } catch (e) {}
         showList();
       }
-    };
+    });
 
+    // Восстановление сессии — выполняется в любом случае,
+    // даже если каких-то кнопок нет на странице
     if (loadSession()) {
       showScreen("screen-test");
       $("t-user").textContent = state.fio;

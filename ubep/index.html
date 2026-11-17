@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>УЭБиПК</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="stylesheet" href="/reset.css">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/test-style.css">
+</head>
+<body>
+<main class="test-main">
+
+  <!-- ЭКРАН 1: РЕГИСТРАЦИЯ -->
+  <div id="screen-reg" class="card">
+    <h1 id="test-title">Тест</h1>
+    <img class="img_title" src="/ubep/img_ubep.jpg" alt="УЭБиПК">
+    <div id="test-instr" class="heading"> <strong>Инструкция</strong> <br><br><b>1. Заполните форму регистрации</b> для прохождения тестирования <br>ФИО вводим полностью, без сокращений
+      <br><br>2. Время на выполнения теста <b>20 минут</b> <br><br>3. Оценка <b>удовлетворительно</b> выставляется, если будет дано не менее 16 правильных ответов, иначе <b>неудовлетворительно</b>
+      <br><br>4. Повторно проходить тестирование <b>ЗАПРЕЩЕНО</b></div>
+    <hr>
+    <h2>Регистрация</h2>
+    <label for="fio">Фамилия Имя Отчество *</label>
+    <input id="fio" type="text" maxlength="100" placeholder="Иванов Иван Иванович" autocomplete="off">
+    <label for="org">Территориальный орган *</label>
+    <select id="org"></select>
+    <div class="row-buttons">
+      <button id="btn-start">Начать тестирование</button>
+      <span id="reg-error" class="bad-text"></span>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 2: ТЕСТ -->
+  <div id="screen-test" class="card hidden">
+    <div class="test-head">
+      <div class="who">
+        <b id="t-user"></b>
+        <div class="muted" id="t-org"></div>
+      </div>
+      <div class="timer-box">Осталось: <span id="timer" class="timer">20:00</span></div>
+    </div>
+    <hr>
+    <div class="counter-row">
+      <span>Вопрос <b id="q-current">1</b> из <b id="q-total">20</b></span>
+      <div class="progress"><div id="progress-fill" class="progress-fill"></div></div>
+    </div>
+    <div id="question-host"></div>
+    <div id="test-error" class="bad-text"></div>
+    <div class="nav-buttons">
+      <button id="btn-prev" class="secondary">← Назад</button>
+      <button id="btn-next">Далее →</button>
+      <button id="btn-finish" class="success hidden">Завершить тест</button>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 3: РЕЗУЛЬТАТ -->
+  <div id="screen-result" class="card hidden">
+    <h1>Результат</h1>
+    <div id="result-body"></div>
+    <div class="row-buttons">
+      <button id="btn-again">Пройти ещё раз</button>
+      <!-- <button id="btn-view-results" class="secondary">Список всех результатов</button> -->
+      <a class="btn-home" href="index.html">На главную</a> 
+    </div>
+  </div>
+
+  <!-- ЭКРАН 4: СПИСОК РЕЗУЛЬТАТОВ -->
+  <div id="screen-list" class="card hidden">
+    <h1>Результаты тестирования</h1>
+    <div class="muted small-mb">Данные хранятся локально в этом браузере (localStorage).</div>
+    <div class="row-buttons">
+      <button id="btn-back" class="secondary">Назад</button>
+      <button id="btn-export" class="secondary">Скачать CSV</button>
+      <button id="btn-clear" class="danger">Очистить всё</button>
+    </div>
+    <div id="results-table"></div>
+  </div>
+
+</main>
+
+<script src="test.js"></script>
+<script src="/test-script.js"></script>
+</body>
+</html>

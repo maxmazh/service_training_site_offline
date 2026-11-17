@@ -1,3 +1,20 @@
+/* --- Локальные шрифты Montserrat (variable, офлайн) --- */
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  /* font-weight: 100 900; */
+  font-display: swap;
+  src: url('fonts/Montserrat-Thin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: italic;
+  /* font-weight: 100 900; */
+  font-display: swap;
+  src: url('fonts/Montserrat-ThinItalic.woff2') format('woff2-variations');
+}
+
 body {
     font-family: Montserrat;
     color: #000;
@@ -15,14 +32,14 @@ h1 {
     font-size: 32px;
     margin-bottom: 20px;
     text-align: center;
-    font-weight: 400;
+    font-weight: 600;
 }
 
 h2 {
     margin-bottom: 20px;
     text-align: center;
     line-height: 1.2;
-    font-weight: 400;
+    font-weight: 600;
 }
 
 .wallpaper_btn {
@@ -47,6 +64,7 @@ h2 {
     padding: 12px 24px;
     background-color: #4169E1;
     color: white;
+    font-weight: 600;
     text-decoration: none;
     border-radius: 8px;
     font-size: 16px;
@@ -79,6 +97,7 @@ nav {
     padding: 12px 24px;
     background-color: #228B22;
     color: white;
+    font-weight: 500;
     text-decoration: none;
     border-radius: 8px;
     font-size: 16px;

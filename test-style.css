@@ -118,3 +118,63 @@ th { background: #f0f2f5; }
   .nav-buttons button { width: 100%; }
   .nav-buttons .secondary { margin-right: 0; }
 }
+
+
+/* --- Шкала результата --- */
+.score-scale {
+  margin: 18px 0 6px;
+}
+.score-scale__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+.score-scale__track {
+  position: relative;
+  width: 100%;
+  height: 18px;
+  background: #e6e9ee;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.score-scale__fill {
+  height: 100%;
+  width: 0;
+  border-radius: 9px;
+  transition: width .6s ease;
+}
+.score-scale__fill.bad  { background: #d9534f; }  /* < 80% — красный */
+.score-scale__fill.good { background: #2e7d32; }  /* ≥ 80% — зелёный */
+
+/* Метка 80% (порог) */
+.score-scale__threshold {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 80%;
+  width: 2px;
+  background: #333;
+  opacity: .35;
+}
+.score-scale__threshold-label {
+  position: absolute;
+  top: 22px;
+  left: 80%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #555;
+  white-space: nowrap;
+}
+.score-scale__value {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.score-scale__value.bad  { color: #c62828; }
+.score-scale__value.good { color: #2e7d32; }
+
+@media (max-width: 480px) {
+  .score-scale__threshold-label { display: none; }
+}
