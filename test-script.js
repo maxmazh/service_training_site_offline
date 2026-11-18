@@ -352,37 +352,120 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       details: details
     };
 
-    try {
-      var payload = JSON.stringify({
-          testName: test.Name || 'Неизвестный тест',
-          fio: record.fio,
-          org: record.org,
-          score: record.score,
-          total: record.total,
-          percent: record.percent,
-          passed: record.passed,
-          spentSec: record.spentSec
-      });
-      if (navigator.sendBeacon) {
-          navigator.sendBeacon('/api/save-result',
-              new Blob([payload], { type: 'application/json' }));
+      var resultForCloud = {
+        testName: test.Name || 'Неизвестный тест',
+        fio: record.fio,
+        org: record.org,
+        score: record.score,
+        total: record.total,
+        percent: record.percent,
+        passed: record.passed,
+        spentSec: record.spentSec,
+        // timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      // --- 1. Пробуем сохранить в Firestore (основной режим) ---
+      // Проверяем, что firebase и db доступны (их инициализация — в firebase-config.js)
+      var cloudPromise;
+      if (typeof db !== "undefined" && db && navigator.onLine) {
+        // Для Firestore добавляем серверный timestamp отдельным полем
+        var cloudData = Object.assign({}, resultForCloud, {
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        cloudPromise = db.collection("results").add(cloudData);
       } else {
-          fetch('/api/save-result', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: payload,
-              keepalive: true
-          }).catch(function (err) { console.error('Ошибка отправки:', err); });
+        // Firebase не инициализирован или нет сети — сразу идём в fallback
+        cloudPromise = Promise.reject(new Error("Firebase недоступен или нет сети"));
       }
-    } catch (e) {}
 
+      cloudPromise
+        .then(function (docRef) {
+          // Успешно сохранили в облако
+          console.log("Результат сохранён в Firestore, ID:", docRef.id);
+          clearLocalAfterSuccess();
+          showResult(record);
+        })
+        .catch(function (err) {
+          // Не удалось сохранить в облако — сохраняем локально
+          console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
+          saveToLocalFallback(resultForCloud, record);
+        });
+    }
+
+  // Очистка localStorage после успешного сохранения в облако
+  function clearLocalAfterSuccess() {
     try {
       localStorage.removeItem(STORAGE_SESSION);
       localStorage.removeItem(STORAGE_RESULTS);
     } catch (e) {}
-
-    showResult(record);
   }
+
+  // Резервное сохранение: сначала пробуем локальный сервер, потом localStorage
+  function saveToLocalFallback(payloadObj, record) {
+    var payload = JSON.stringify(payloadObj);
+
+    function doLocalStorage() {
+      try {
+        saveResult(record); // ваша старая функция, пишет в STORAGE_RESULTS
+      } catch (e) {}
+      try {
+        localStorage.removeItem(STORAGE_SESSION);
+      } catch (e) {}
+      showResult(record);
+    }
+
+    // Пробуем отправить на локальный /api/save-result (если запущен server.exe)
+    if (navigator.sendBeacon) {
+      var ok = navigator.sendBeacon(
+        "/api/save-result",
+        new Blob([payload], { type: "application/json" })
+      );
+      if (ok) {
+        // sendBeacon не даёт подтверждения, но если вернул true — запрос поставлен в очередь
+        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+        showResult(record);
+        return;
+      }
+      // sendBeacon вернул false — идём в localStorage
+      doLocalStorage();
+      return;
+    }
+
+    fetch("/api/save-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      keepalive: true
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+        showResult(record);
+      })
+      .catch(function () {
+        doLocalStorage();
+      });
+  }
+
+  //     if (navigator.sendBeacon) {
+  //         navigator.sendBeacon('/api/save-result',
+  //             new Blob([payload], { type: 'application/json' }));
+  //     } else {
+  //         fetch('/api/save-result', {
+  //             method: 'POST',
+  //             headers: { 'Content-Type': 'application/json' },
+  //             body: payload,
+  //             keepalive: true
+  //         }).catch(function (err) { console.error('Ошибка отправки:', err); });
+  //     }
+  //   } catch (e) {}
+
+  //   try {
+  //     localStorage.removeItem(STORAGE_SESSION);
+  //     localStorage.removeItem(STORAGE_RESULTS);
+  //   } catch (e) {}
+
+  //   showResult(record);
+  // }
 
   // ====== РЕЗУЛЬТАТЫ ======
   function loadResults() {

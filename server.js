@@ -5,8 +5,19 @@ const path = require('path');
 const app = express();
 const PORT = 8080;
 
+// const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
+
+const basePath = process.pkg 
+    ? path.dirname(process.execPath)
+    : __dirname;     
+
 app.use(express.json());
-app.use(express.static(__dirname));
+app.use(express.static(basePath));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(basePath, 'index.html'));
+});
+
 
 // --- Вспомогательные функции для записи CSV ---
 
@@ -25,6 +36,12 @@ function toCsvRow(values) {
         }
         return str;
     }).join(';');
+}
+
+function formatRuDateTime(d) {
+    const pad = n => n < 10 ? '0' + n : '' + n;
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() +
+            ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
 }
 
 // Заголовок с BOM (для Excel)
@@ -53,7 +70,9 @@ function saveResultLine(line) {
     const delayMs = 100;
 
     // Сначала пробуем основной файл с повторами
-    const mainPath = path.join(__dirname, baseName + '.csv');
+    const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
+    const mainPath = path.join(baseDir, baseName + '.csv');
+    // const mainPath = path.join(__dirname, baseName + '.csv');
     for (let i = 0; i < maxAttemptsPerFile; i++) {
         if (tryAppend(mainPath, line)) {
             return { file: baseName + '.csv', fallback: false };
@@ -64,7 +83,7 @@ function saveResultLine(line) {
     // Основной файл занят — ищем свободный резервный
     for (let n = 2; n < 1000; n++) {
         const fallbackName = baseName + '_' + n + '.csv';
-        const fallbackPath = path.join(__dirname, fallbackName);
+        const fallbackPath = path.join(baseDir, fallbackName);
         // В резервный тоже пробуем несколько раз (на случай, если он тоже открыт)
         for (let i = 0; i < maxAttemptsPerFile; i++) {
             if (tryAppend(fallbackPath, line)) {
@@ -87,7 +106,8 @@ app.post('/api/save-result', (req, res) => {
         return res.status(400).json({ error: 'Invalid data' });
     }
 
-    const timestamp = new Date().toLocaleString('ru-RU');
+    const timestamp = formatRuDateTime(new Date());
+
     const line = toCsvRow([
         timestamp,
         result.testName,
@@ -137,7 +157,7 @@ function parseCsvLine(line) {
 }
 
 function readAllResults() {
-    const dir = __dirname;
+    const dir = basePath;
     // Собираем все results.csv и results_N.csv
     const files = fs.readdirSync(dir)
         .filter(f => /^results(_\d+)?\.csv$/.test(f))
