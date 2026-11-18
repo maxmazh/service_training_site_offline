@@ -365,31 +365,93 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       };
       // --- 1. Пробуем сохранить в Firestore (основной режим) ---
       // Проверяем, что firebase и db доступны (их инициализация — в firebase-config.js)
+      
       var cloudPromise;
+      // Проверяем, есть ли сеть и инициализирован ли Firestore
       if (typeof db !== "undefined" && db && navigator.onLine) {
-        // Для Firestore добавляем серверный timestamp отдельным полем
-        var cloudData = Object.assign({}, resultForCloud, {
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        cloudPromise = db.collection("results").add(cloudData);
+          var cloudData = Object.assign({}, resultForCloud, {
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          
+          // Пытаемся записать в Firestore с таймаутом
+          cloudPromise = new Promise(function (resolve, reject) {
+              var timer = setTimeout(function () {
+                  // Если таймаут — ПРИНУДИТЕЛЬНО отключаем сеть Firestore,
+                  // чтобы он перестал пытаться достучаться до сервера
+                  if (db && db.disableNetwork) {
+                      db.disableNetwork().catch(function(){});
+                  }
+                  reject(new Error("Таймаут Firestore"));
+              }, 4000);
+              
+              db.collection("results").add(cloudData)
+                  .then(function (docRef) {
+                      clearTimeout(timer);
+                      resolve(docRef);
+                  })
+                  .catch(function (err) {
+                      clearTimeout(timer);
+                      reject(err);
+                  });
+          });
       } else {
-        // Firebase не инициализирован или нет сети — сразу идём в fallback
-        cloudPromise = Promise.reject(new Error("Firebase недоступен или нет сети"));
+          // Сети нет или Firebase не загружен — сразу идём в fallback
+          cloudPromise = Promise.reject(new Error("Firebase недоступен"));
       }
 
       cloudPromise
-        .then(function (docRef) {
-          // Успешно сохранили в облако
-          console.log("Результат сохранён в Firestore, ID:", docRef.id);
-          clearLocalAfterSuccess();
-          showResult(record);
-        })
-        .catch(function (err) {
-          // Не удалось сохранить в облако — сохраняем локально
-          console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
-          saveToLocalFallback(resultForCloud, record);
-        });
+          .then(function (docRef) {
+              console.log("Результат сохранён в Firestore, ID:", docRef.id);
+              clearLocalAfterSuccess();
+              showResult(record);
+          })
+          .catch(function (err) {
+              console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
+              // Убедимся, что Firestore отключён, чтобы не спамил в консоль
+              if (typeof db !== "undefined" && db && db.disableNetwork) {
+                  db.disableNetwork().catch(function(){});
+              }
+              saveToLocalFallback(resultForCloud, record);
+          });
     }
+
+    //     cloudPromise
+    //         .then(function (docRef) {
+    //             console.log("Результат сохранён в Firestore, ID:", docRef.id);
+    //             clearLocalAfterSuccess();
+    //             showResult(record);
+    //         })
+    //         .catch(function (err) {
+    //             console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
+    //             saveToLocalFallback(resultForCloud, record);
+    //         });
+
+
+    //   var cloudPromise;
+    //   if (typeof db !== "undefined" && db && navigator.onLine) {
+    //     // Для Firestore добавляем серверный timestamp отдельным полем
+    //     var cloudData = Object.assign({}, resultForCloud, {
+    //       timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    //     });
+    //     cloudPromise = db.collection("results").add(cloudData);
+    //   } else {
+    //     // Firebase не инициализирован или нет сети — сразу идём в fallback
+    //     cloudPromise = Promise.reject(new Error("Firebase недоступен или нет сети"));
+    //   }
+
+    //   cloudPromise
+    //     .then(function (docRef) {
+    //       // Успешно сохранили в облако
+    //       console.log("Результат сохранён в Firestore, ID:", docRef.id);
+    //       clearLocalAfterSuccess();
+    //       showResult(record);
+    //     })
+    //     .catch(function (err) {
+    //       // Не удалось сохранить в облако — сохраняем локально
+    //       console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
+    //       saveToLocalFallback(resultForCloud, record);
+    //     });
+    // }
 
   // Очистка localStorage после успешного сохранения в облако
   function clearLocalAfterSuccess() {
