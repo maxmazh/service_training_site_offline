@@ -1,43 +1,44 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<title>Результаты тестирования</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <title>Результаты тестирования</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="favicon.png" type="image/png">
 
-<link rel="stylesheet" href="reset.css">
-<link rel="stylesheet" href="style.css">
-<style>
-  .results-main { max-width: 1200px; margin: 0 auto; padding: 24px; }
-  .results-toolbar {
-    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-  .results-toolbar input,
-  .results-toolbar select {
-    padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
-    width: auto;
-  }
-  .results-toolbar input[type="text"] { min-width: 200px; }
-  .results-toolbar button, .results-toolbar a {
-    padding: 10px 16px; border: 0; border-radius: 6px;
-    background: #2c7be5; color: #fff; cursor: pointer; text-decoration: none;
-  }
-  .results-toolbar button.secondary { background: #6c757d; }
-  .results-toolbar a.btn-main { background: #2e7d32; }
-  .results-toolbar button:hover { opacity: .9; }
-  .results-summary { font-size: 14px; color: #555; margin-bottom: 10px; font-weight: 600; }
-  .results-table-wrap { overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: left; vertical-align: top; font-weight: 600; }
-  th { background: #f7f9fc; position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; }
-  th:hover { background: #eef2f8; }
-  tr:hover td { background: #fafbfd; }
-  .ok { color: #2e7d32; font-weight: 600; }
-  .bad { color: #c62828; font-weight: 600; }
-  .muted { color: #888; font-weight: 600; }
-  .empty { padding: 30px; text-align: center; color: #777; }
-</style>
+  <link rel="stylesheet" href="reset.css">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .results-main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .results-toolbar {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .results-toolbar input,
+    .results-toolbar select {
+      padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;
+      width: auto;
+    }
+    .results-toolbar input[type="text"] { min-width: 200px; }
+    .results-toolbar button, .results-toolbar a {
+      padding: 10px 16px; border: 0; border-radius: 6px;
+      background: #2c7be5; color: #fff; cursor: pointer; text-decoration: none;
+    }
+    .results-toolbar button.secondary { background: #6c757d; }
+    .results-toolbar a.btn-main { background: #2e7d32; }
+    .results-toolbar button:hover { opacity: .9; }
+    .results-summary { font-size: 14px; color: #555; margin-bottom: 10px; font-weight: 600; }
+    .results-table-wrap { overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: left; vertical-align: top; font-weight: 600; }
+    th { background: #f7f9fc; position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; }
+    th:hover { background: #eef2f8; }
+    tr:hover td { background: #fafbfd; }
+    .ok { color: #2e7d32; font-weight: 600; }
+    .bad { color: #c62828; font-weight: 600; }
+    .muted { color: #888; font-weight: 600; }
+    .empty { padding: 30px; text-align: center; color: #777; }
+  </style>
 </head>
 <body>
 <main class="results-main">

@@ -19,7 +19,8 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     org: "",
     startedAt: 0,
     deadline: 0,
-    timerId: null
+    timerId: null,
+    isFinishing: false
   };
 
   // ====== УТИЛИТЫ ======
@@ -299,6 +300,17 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
 
   // ====== ЗАВЕРШЕНИЕ ======
   function finishTest(timeUp) {
+    // Защита от повторного вызова
+    if (state.isFinishing) return;
+    state.isFinishing = true;
+
+    // Блокируем кнопку «Завершить» (и на всякий случай «Далее»)
+    var btnFinish = $("btn-finish");
+    if (btnFinish) { btnFinish.disabled = true; btnFinish.textContent = "Отправка..."; }
+    var btnNext = $("btn-next");
+    if (btnNext) btnNext.disabled = true;
+
+
     if (!timeUp) {
       var unanswered = state.questions.filter(function (q) {
         return state.answers[q.Id] == null;
@@ -306,6 +318,10 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       if (unanswered.length > 0) {
         $("test-error").textContent =
           "Есть вопросы без ответа (" + unanswered.length + "). Пройдите по ним через «Назад» или «Далее».";
+        // Разблокируем, раз завершение не состоялось
+        state.isFinishing = false;
+        if (btnFinish) { btnFinish.disabled = false; btnFinish.textContent = "Завершить тест"; }
+        if (btnNext) btnNext.disabled = false;
         return;
       }
     }
@@ -363,55 +379,34 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
         spentSec: record.spentSec,
         // timestamp: firebase.firestore.FieldValue.serverTimestamp()
       };
+
       // --- 1. Пробуем сохранить в Firestore (основной режим) ---
       // Проверяем, что firebase и db доступны (их инициализация — в firebase-config.js)
-      
       var cloudPromise;
-      // Проверяем, есть ли сеть и инициализирован ли Firestore
-      if (typeof db !== "undefined" && db && navigator.onLine) {
+        if (typeof db !== "undefined" && db && navigator.onLine) {
           var cloudData = Object.assign({}, resultForCloud, {
-              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
           });
-          
-          // Пытаемся записать в Firestore с таймаутом
-          cloudPromise = new Promise(function (resolve, reject) {
-              var timer = setTimeout(function () {
-                  // Если таймаут — ПРИНУДИТЕЛЬНО отключаем сеть Firestore,
-                  // чтобы он перестал пытаться достучаться до сервера
-                  if (db && db.disableNetwork) {
-                      db.disableNetwork().catch(function(){});
-                  }
-                  reject(new Error("Таймаут Firestore"));
-              }, 4000);
-              
-              db.collection("results").add(cloudData)
-                  .then(function (docRef) {
-                      clearTimeout(timer);
-                      resolve(docRef);
-                  })
-                  .catch(function (err) {
-                      clearTimeout(timer);
-                      reject(err);
-                  });
-          });
-      } else {
-          // Сети нет или Firebase не загружен — сразу идём в fallback
+          cloudPromise = db.collection("results").add(cloudData)
+            .then(function (docRef) {
+              return docRef.get({ source: "server" }).then(function (snap) {
+                if (!snap.exists) throw new Error("Запись не подтверждена сервером");
+                return docRef;
+              });
+            });
+        } else {
           cloudPromise = Promise.reject(new Error("Firebase недоступен"));
-      }
+        }
 
-      cloudPromise
+        cloudPromise
           .then(function (docRef) {
-              console.log("Результат сохранён в Firestore, ID:", docRef.id);
-              clearLocalAfterSuccess();
-              showResult(record);
+            console.log("Результат подтверждён сервером, ID:", docRef.id);
+            clearLocalAfterSuccess();
+            showResult(record);
           })
           .catch(function (err) {
-              console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
-              // Убедимся, что Firestore отключён, чтобы не спамил в консоль
-              if (typeof db !== "undefined" && db && db.disableNetwork) {
-                  db.disableNetwork().catch(function(){});
-              }
-              saveToLocalFallback(resultForCloud, record);
+            console.warn("Сервер не подтвердил запись, сохраняем локально:", err.message);
+            saveToLocalFallback(resultForCloud, record);
           });
     }
 
@@ -476,37 +471,62 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     }
 
     // Пробуем отправить на локальный /api/save-result (если запущен server.exe)
-    if (navigator.sendBeacon) {
-      var ok = navigator.sendBeacon(
-        "/api/save-result",
-        new Blob([payload], { type: "application/json" })
-      );
-      if (ok) {
-        // sendBeacon не даёт подтверждения, но если вернул true — запрос поставлен в очередь
-        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-        showResult(record);
-        return;
-      }
-      // sendBeacon вернул false — идём в localStorage
-      doLocalStorage();
-      return;
-    }
+    var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (controller) controller.abort();
+    }, 2000);
 
     fetch("/api/save-result", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
-      keepalive: true
+      signal: controller ? controller.signal : undefined
     })
       .then(function (r) {
+        clearTimeout(timer);
         if (!r.ok) throw new Error("HTTP " + r.status);
         try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
         showResult(record);
       })
       .catch(function () {
+        clearTimeout(timer);
+        // Сервер недоступен (GitHub Pages, нет server.exe, таймаут) — сохраняем в localStorage
         doLocalStorage();
       });
   }
+
+
+  //   if (navigator.sendBeacon) {
+  //     var ok = navigator.sendBeacon(
+  //       "/api/save-result",
+  //       new Blob([payload], { type: "application/json" })
+  //     );
+  //     if (ok) {
+  //       // sendBeacon не даёт подтверждения, но если вернул true — запрос поставлен в очередь
+  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+  //       showResult(record);
+  //       return;
+  //     }
+  //     // sendBeacon вернул false — идём в localStorage
+  //     doLocalStorage();
+  //     return;
+  //   }
+
+  //   fetch("/api/save-result", {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: payload,
+  //     keepalive: true
+  //   })
+  //     .then(function (r) {
+  //       if (!r.ok) throw new Error("HTTP " + r.status);
+  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+  //       showResult(record);
+  //     })
+  //     .catch(function () {
+  //       doLocalStorage();
+  //     });
+  // }
 
   //     if (navigator.sendBeacon) {
   //         navigator.sendBeacon('/api/save-result',
