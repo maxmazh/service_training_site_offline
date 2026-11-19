@@ -20,3 +20,12 @@ if (!firebase.apps.length) {
 
 // const app = initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
+firebase.firestore().enablePersistence()
+  .catch(function(err) {
+    if (err.code === 'failed-precondition') {
+      console.warn('Персистентность недоступна (открыто несколько вкладок)');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Браузер не поддерживает персистентность');
+    }
+  });

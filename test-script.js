@@ -456,21 +456,16 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     } catch (e) {}
   }
 
-  // Резервное сохранение: сначала пробуем локальный сервер, потом localStorage
   function saveToLocalFallback(payloadObj, record) {
-    var payload = JSON.stringify(payloadObj);
-
-    function doLocalStorage() {
-      try {
-        saveResult(record); // ваша старая функция, пишет в STORAGE_RESULTS
-      } catch (e) {}
-      try {
-        localStorage.removeItem(STORAGE_SESSION);
-      } catch (e) {}
-      showResult(record);
+    // 1. СНАЧАЛА гарантированно сохраняем в localStorage
+    try {
+      saveResult(record); // пишет в STORAGE_RESULTS
+    } catch (e) {
+      console.error("Не удалось сохранить в localStorage:", e);
     }
 
-    // Пробуем отправить на локальный /api/save-result (если запущен server.exe)
+    // 2. Потом пробуем отправить на локальный сервер (если он есть)
+    var payload = JSON.stringify(payloadObj);
     var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
     var timer = setTimeout(function () {
       if (controller) controller.abort();
@@ -485,16 +480,71 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       .then(function (r) {
         clearTimeout(timer);
         if (!r.ok) throw new Error("HTTP " + r.status);
+        // Успешно отправили на локальный сервер — можно удалить из localStorage
+        removeFromLocalResults(record);
         try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-        showResult(record);
       })
       .catch(function () {
         clearTimeout(timer);
-        // Сервер недоступен (GitHub Pages, нет server.exe, таймаут) — сохраняем в localStorage
-        doLocalStorage();
+        // Не удалось отправить — результат УЖЕ в localStorage, ничего не теряем
+        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+      })
+      .finally(function () {
+        showResult(record);
       });
   }
 
+  // Удаляет конкретный результат из localStorage (по совпадению полей)
+  function removeFromLocalResults(record) {
+    try {
+      var arr = loadResults();
+      var idx = arr.findIndex(function (r) {
+        return r.fio === record.fio && r.startedAt === record.startedAt && r.score === record.score;
+      });
+      if (idx !== -1) {
+        arr.splice(idx, 1);
+        localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr));
+      }
+    } catch (e) {}
+  }
+  // Резервное сохранение: сначала пробуем локальный сервер, потом localStorage
+  // function saveToLocalFallback(payloadObj, record) {
+  //   var payload = JSON.stringify(payloadObj);
+
+  //   function doLocalStorage() {
+  //     try {
+  //       saveResult(record); // ваша старая функция, пишет в STORAGE_RESULTS
+  //     } catch (e) {}
+  //     try {
+  //       localStorage.removeItem(STORAGE_SESSION);
+  //     } catch (e) {}
+  //     showResult(record);
+  //   }
+
+  //   // Пробуем отправить на локальный /api/save-result (если запущен server.exe)
+  //   var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  //   var timer = setTimeout(function () {
+  //     if (controller) controller.abort();
+  //   }, 2000);
+
+  //   fetch("/api/save-result", {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: payload,
+  //     signal: controller ? controller.signal : undefined
+  //   })
+  //     .then(function (r) {
+  //       clearTimeout(timer);
+  //       if (!r.ok) throw new Error("HTTP " + r.status);
+  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
+  //       showResult(record);
+  //     })
+  //     .catch(function () {
+  //       clearTimeout(timer);
+  //       // Сервер недоступен (GitHub Pages, нет server.exe, таймаут) — сохраняем в localStorage
+  //       doLocalStorage();
+  //     });
+  // }
 
   //   if (navigator.sendBeacon) {
   //     var ok = navigator.sendBeacon(
