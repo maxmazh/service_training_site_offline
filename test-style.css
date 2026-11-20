@@ -77,10 +77,8 @@ button:disabled { background: #b0b8c1; cursor: not-allowed; }
 }
 
 /* --- Вопрос --- */
-.q-text {
-  font-size: 17px; line-height: 1.45;
-  font-weight: bold; margin-bottom: 14px;
-}
+.q {margin-top: 20px; }
+.q-text { font-size: 17px; line-height: 1.45; font-weight: bold; }
 .ans {
   display: block; padding: 10px 12px;
   border: 1px solid #e3e7ed; border-radius: 6px;

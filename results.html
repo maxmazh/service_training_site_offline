@@ -94,7 +94,8 @@
 
   var allRows = [];
   var sortKey = "date";
-  var sortAsc = false; // свежие сверху по умолчанию
+  var sortAsc = false;
+  var dataSource = null;
 
   function fmtDuration(sec) {
     sec = Math.max(0, Math.floor(sec));
@@ -115,92 +116,169 @@
     return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]);
   }
 
-  function load() {
-    document.getElementById("loading").textContent = "Загрузка...";
 
-    // Основной режим — Firestore, но с таймаутом
-    if (typeof db !== "undefined" && db && navigator.onLine) {
-      // Оборачиваем в промис с таймаутом
-      var fetchPromise = new Promise(function (resolve, reject) {
-        var timer = setTimeout(function () {
-          // Принудительно отключаем сеть Firestore, чтобы он перестал пытаться
-          if (db && db.disableNetwork) {
-            db.disableNetwork().catch(function(){});
-          }
-          reject(new Error("Таймаут Firestore"));
-        }, 5000); // 5 секунд
+  function checkLocalServer() {
+    var controller = new AbortController();
 
-        db.collection("results").orderBy("timestamp", "desc").get()
-          .then(function (querySnapshot) {
-            clearTimeout(timer);
-            resolve(querySnapshot);
-          })
-          .catch(function (err) {
-            clearTimeout(timer);
-            reject(err);
-          });
-      });
+    var timeoutId = setTimeout(function () {
+      controller.abort();
+    }, 3000);
 
-      fetchPromise
-        .then(function (querySnapshot) {
-          var rows = [];
-          querySnapshot.forEach(function (doc) {
-            var data = doc.data();
-            var dateStr = "";
-            if (data.timestamp && typeof data.timestamp.toDate === "function") {
-              dateStr = data.timestamp.toDate().toLocaleString("ru-RU");
-            } else if (data.finishedAt) {
-              dateStr = new Date(data.finishedAt).toLocaleString("ru-RU");
-            }
-            rows.push({
-              id: doc.id,
-              date: dateStr,
-              test: data.testName || "",
-              fio: data.fio || "",
-              org: data.org || "",
-              score: data.score || 0,
-              total: data.total || 0,
-              percent: data.percent || 0,
-              verdict: data.passed ? "Уд" : "Неуд",
-              spentSec: data.spentSec || 0
-            });
-          });
-          allRows = rows;
-          fillTestFilter();
-          render();
-          document.getElementById("loading").textContent = "";
-        })
-        .catch(function (err) {
-          console.warn("Firestore недоступен, пробуем локальный API:", err.message);
-          // Убедимся, что Firestore отключён
-          if (typeof db !== "undefined" && db && db.disableNetwork) {
-            db.disableNetwork().catch(function(){});
-          }
-          loadFromLocalApi();
+    return fetch("/api/health", {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal
+    })
+      .then(function (response) {
+        if (!response.ok) return false;
+
+        return response.json().then(function (data) {
+          return data && data.status === "ok";
         });
-    } else {
-      loadFromLocalApi();
-    }
+      })
+      .catch(function () {
+        return false;
+      })
+      .then(function (available) {
+        clearTimeout(timeoutId);
+        return available;
+      });
+  }
+
+  function load() {
+    document.getElementById("loading").textContent = "Проверка сервера...";
+
+    checkLocalServer().then(function (localAvailable) {
+      if (localAvailable) {
+        // Локальный сервер доступен — используем CSV
+        dataSource = "local";
+        loadFromLocalApi();
+      } else {
+        // Локального сервера нет — используем Firestore
+        dataSource = "firestore";
+        loadFromFirestore();
+      }
+    });
   }
 
   function loadFromLocalApi() {
-    fetch("/api/results")
-      .then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
+    document.getElementById("loading").textContent =
+      "Загрузка локальных результатов...";
+
+    fetch("/api/results", {
+      method: "GET",
+      cache: "no-store"
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+
+        return response.json();
       })
       .then(function (rows) {
+        allRows = rows.map(function (r) {
+          return {
+            id: r.id || null,
+            date: r.date || "",
+            test: r.test || "",
+            fio: r.fio || "",
+            org: r.org || "",
+            score: Number(r.score) || 0,
+            total: Number(r.total) || 0,
+            percent: Number(r.percent) || 0,
+            verdict: r.verdict || "",
+            spentSec: Number(r.spentSec) || 0,
+            sourceFile: r.sourceFile || ""
+          };
+        });
+
+        fillTestFilter();
+        render();
+
+        document.getElementById("loading").textContent =
+          "Режим: локальный сервер";
+      })
+      .catch(function (error) {
+        console.error("Ошибка загрузки локальных результатов:", error);
+
+        document.getElementById("loading").textContent =
+          "Не удалось загрузить результаты из локальных CSV-файлов.";
+
+        allRows = [];
+        fillTestFilter();
+        render();
+      });
+  }
+
+  function loadFromFirestore() {
+    document.getElementById("loading").textContent =
+      "Загрузка результатов из Firestore...";
+
+    var firestore = window.db;
+
+    if (!firestore) {
+      document.getElementById("loading").textContent =
+        "Firestore не инициализирован.";
+
+      return;
+    }
+
+    var ready = window.firestoreReady || Promise.resolve();
+
+    ready
+      .then(function () {
+        return firestore.collection("results")
+          .orderBy("timestamp", "desc")
+          .get();
+      })
+      .then(function (querySnapshot) {
+        var rows = [];
+
+        querySnapshot.forEach(function (doc) {
+          var data = doc.data();
+          var dateStr = "";
+
+          if (data.timestamp &&
+              typeof data.timestamp.toDate === "function") {
+            dateStr = data.timestamp.toDate().toLocaleString("ru-RU");
+          } else if (data.finishedAt) {
+            dateStr = new Date(data.finishedAt).toLocaleString("ru-RU");
+          }
+
+          rows.push({
+            id: doc.id,
+            date: dateStr,
+            test: data.testName || "",
+            fio: data.fio || "",
+            org: data.org || "",
+            score: Number(data.score) || 0,
+            total: Number(data.total) || 0,
+            percent: Number(data.percent) || 0,
+            verdict: data.passed ? "Уд" : "Неуд",
+            spentSec: Number(data.spentSec) || 0
+          });
+        });
+
         allRows = rows;
         fillTestFilter();
         render();
-        document.getElementById("loading").textContent = "";
-      })
-      .catch(function (e) {
-        console.error("Локальный API недоступен:", e);
+
         document.getElementById("loading").textContent =
-          "Не удалось загрузить результаты (ни Firestore, ни локальный API).";
+          "Режим: Firestore";
+      })
+      .catch(function (error) {
+        console.error("Ошибка загрузки Firestore:", error);
+
+        document.getElementById("loading").textContent =
+          "Не удалось загрузить результаты из Firestore.";
+
+        allRows = [];
+        fillTestFilter();
+        render();
       });
   }
+
   //           // Резервный вариант: читаем с локального сервера
   //           fetch("/api/results")
   //               .then(function(r) { return r.json(); })
@@ -293,130 +371,192 @@
         "<td>" + r.percent + "</td>" +
         '<td class="' + verdictCls + '">' + escapeHtml(r.verdict) + "</td>" +
         "<td>" + fmtDuration(r.spentSec) + "</td>" + 
-        '<td class="delete-result-btn-td"><button class="delete-result-btn" data-id="' +
-        escapeHtml(r.id) + '" title="Удалить результат">×</button></td>' +
+        '<td class="delete-result-btn-td">' +
+          '<button class="delete-result-btn" data-id="' +
+          escapeHtml(r.id) +
+          '" title="Удалить результат">×</button>' +
+        '</td>' +
       "</tr>";
     });
     tbody.innerHTML = html;
   }
 
   function deleteResult(id) {
-      var result = allRows.find(function (r) {
-          return r.id === id;
-      });
+    var result = allRows.find(function (r) {
+        return r.id === id;
+    });
 
-      if (!result) {
-          alert("Результат не найден.");
-          return;
-      }
+    if (!result) {
+        alert("Результат не найден.");
+        return;
+    }
 
-      var confirmed = confirm(
-          "Удалить результат?\n\n" +
-          "ФИО: " + result.fio + "\n" +
-          "Тест: " + result.test + "\n" +
-          "Баллы: " + result.score + " / " + result.total
-      );
+    var confirmed = confirm(
+        "Удалить результат?\n\n" +
+        "ФИО: " + result.fio + "\n" +
+        "Тест: " + result.test + "\n" +
+        "Баллы: " + result.score + " / " + result.total
+    );
 
-      if (!confirmed) return;
+    if (!confirmed) return;
 
-      document.getElementById("loading").textContent = "Удаление...";
+    document.getElementById("loading").textContent = "Удаление...";
 
-      db.collection("results").doc(id).delete()
-          .then(function () {
-              // Удаляем запись из локального массива
-              allRows = allRows.filter(function (r) {
-                  return r.id !== id;
-              });
+    var deletePromise;
 
-              fillTestFilter();
-              render();
+    if (dataSource === "local") {
+        // Удаление записи из локального CSV
+        deletePromise = fetch(
+            "/api/results/" + encodeURIComponent(id),
+            {
+                method: "DELETE"
+            }
+        ).then(function (response) {
+            if (!response.ok) {
+                throw new Error("Ошибка HTTP: " + response.status);
+            }
 
-              document.getElementById("loading").textContent =
-                  "Результат успешно удалён.";
+            return response.json();
+        });
 
-              console.log("Результат удалён:", id);
-          })
-          .catch(function (error) {
-              console.error("Ошибка удаления результата:", error);
+    } else if (dataSource === "firestore") {
+        // Удаление документа из Firestore
+        deletePromise = window.db
+            .collection("results")
+            .doc(id)
+            .delete();
 
-              document.getElementById("loading").textContent =
-                  "Не удалось удалить результат.";
+    } else {
+        alert("Не удалось определить источник данных.");
+        return;
+    }
 
-              alert("Ошибка удаления результата. Проверь подключение и права доступа.");
-          });
+    deletePromise
+        .then(function () {
+            // Удаляем запись из массива
+            allRows = allRows.filter(function (r) {
+                return r.id !== id;
+            });
+
+            fillTestFilter();
+            render();
+
+            document.getElementById("loading").textContent =
+                "Результат успешно удалён.";
+
+            console.log("Результат удалён:", id);
+        })
+        .catch(function (error) {
+            console.error("Ошибка удаления результата:", error);
+
+            document.getElementById("loading").textContent =
+                "Не удалось удалить результат.";
+
+            alert(
+                "Ошибка удаления результата. " +
+                "Проверь подключение и доступность сервера."
+            );
+        });
   }
 
   function deleteAllResults() {
-      var confirmed = confirm(
-          "ВНИМАНИЕ!\n\n" +
-          "Ты действительно хочешь удалить ВСЕ результаты тестирования?\n\n" +
-          "Это действие нельзя отменить."
-      );
+    var confirmed = confirm(
+        "ВНИМАНИЕ!\n\n" +
+        "Ты действительно хочешь удалить ВСЕ результаты тестирования?\n\n" +
+        "Это действие нельзя отменить."
+    );
 
-      if (!confirmed) return;
+    if (!confirmed) return;
 
-      var button = document.getElementById("btn-delete-all");
+    var button = document.getElementById("btn-delete-all");
 
-      button.disabled = true;
-      document.getElementById("loading").textContent =
-          "Удаление всех результатов...";
+    button.disabled = true;
 
-      // Получаем все документы коллекции, а не только видимые после фильтрации
-      db.collection("results").get()
-          .then(function (snapshot) {
+    document.getElementById("loading").textContent =
+        "Удаление всех результатов...";
 
-              if (snapshot.empty) {
-                  document.getElementById("loading").textContent =
-                      "В базе нет результатов.";
+    var deletePromise;
 
-                  return;
-              }
+    if (dataSource === "local") {
+        // Удаление всех локальных CSV-файлов
+        deletePromise = fetch("/api/results", {
+            method: "DELETE"
+        }).then(function (response) {
+            if (!response.ok) {
+                throw new Error("Ошибка HTTP: " + response.status);
+            }
 
-              var docs = snapshot.docs;
-              var deletePromise = Promise.resolve();
+            return response.json();
+        });
 
-              // Firestore позволяет удалить не более 500 документов
-              // одним batch-запросом
-              for (var i = 0; i < docs.length; i += 500) {
-                  (function (batchDocs) {
-                      deletePromise = deletePromise.then(function () {
-                          var batch = db.batch();
+    } else if (dataSource === "firestore") {
+        // Удаление всех документов Firestore
+        deletePromise = window.db
+            .collection("results")
+            .get()
+            .then(function (snapshot) {
+                if (snapshot.empty) {
+                    return { deleted: 0 };
+                }
 
-                          batchDocs.forEach(function (doc) {
-                              batch.delete(doc.ref);
-                          });
+                var docs = snapshot.docs;
+                var deletePromise = Promise.resolve();
 
-                          return batch.commit();
-                      });
-                  })(docs.slice(i, i + 500));
-              }
+                // Firestore позволяет удалить до 500 документов за batch
+                for (var i = 0; i < docs.length; i += 500) {
+                    (function (batchDocs) {
+                        deletePromise = deletePromise.then(function () {
+                            var batch = window.db.batch();
 
-              return deletePromise.then(function () {
-                  allRows = [];
+                            batchDocs.forEach(function (doc) {
+                                batch.delete(doc.ref);
+                            });
 
-                  fillTestFilter();
-                  render();
+                            return batch.commit();
+                        });
+                    })(docs.slice(i, i + 500));
+                }
 
-                  document.getElementById("loading").textContent =
-                      "Все результаты успешно удалены.";
+                return deletePromise.then(function () {
+                    return { deleted: docs.length };
+                });
+            });
 
-                  console.log("Удалено документов:", docs.length);
-              });
-          })
-          .catch(function (error) {
-              console.error("Ошибка удаления результатов:", error);
+    } else {
+        button.disabled = false;
 
-              document.getElementById("loading").textContent =
-                  "Не удалось удалить все результаты.";
+        document.getElementById("loading").textContent =
+            "Не удалось определить источник данных.";
 
-              alert(
-                  "Произошла ошибка при удалении результатов. " +
-                  "Проверь подключение и права доступа."
-              );
-          })
-          .finally(function () {
-              button.disabled = false;
-          });
+        return;
+    }
+
+    deletePromise
+        .then(function (result) {
+            allRows = [];
+
+            fillTestFilter();
+            render();
+
+            document.getElementById("loading").textContent =
+                "Все результаты успешно удалены.";
+
+            console.log("Удаление завершено:", result);
+        })
+        .catch(function (error) {
+            console.error("Ошибка удаления результатов:", error);
+
+            document.getElementById("loading").textContent =
+                "Не удалось удалить все результаты.";
+
+            alert(
+                "Произошла ошибка при удалении результатов. " +
+                "Проверь подключение и права доступа."
+            );
+        })
+        .finally(function () {
+            button.disabled = false;
+        });
   }
 
   function downloadCSV() {

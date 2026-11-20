@@ -380,34 +380,164 @@
       spentSec: record.spentSec,
     };
 
-    // 1. Сохраняем результат в собственную очередь
-    try {
-
-      addToPendingResults(resultForCloud, record);
-
-      saveResult(record);
-
-      localStorage.removeItem(STORAGE_SESSION);
-
-      showResult(record);
-
-      syncPendingResults();
-
-    } catch (error) {
-
-      console.error(
-        "Критическая ошибка локального сохранения:",
-        error
-      );
-
-      showResult(record);
-
-      alert(
-        "Не удалось сохранить результат локально. " +
-        "Пожалуйста, не закрывайте страницу и сообщите администратору."
-      );
-    }
+    saveCompletedResult(resultForCloud, record);
   }
+    // 1. Сохраняем результат в собственную очередь
+    // try {
+    //   addToPendingResults(resultForCloud, record);
+    //   saveResult(record);
+    //   localStorage.removeItem(STORAGE_SESSION);
+    //   showResult(record);
+    //   syncPendingResults();
+    // } catch (error) {
+    //   console.error(
+    //     "Критическая ошибка локального сохранения:",
+    //     error
+    //   );
+    //   showResult(record);
+    //   alert(
+    //     "Не удалось сохранить результат локально. " +
+    //     "Пожалуйста, не закрывайте страницу и сообщите администратору."
+    //   );
+    // }
+
+  // ====== ВЫБОР ХРАНИЛИЩА РЕЗУЛЬТАТОВ ======
+  // Проверяем доступность локального Node.js-сервера
+  function checkLocalServer() {
+    var controller = new AbortController();
+
+    var timeoutId = setTimeout(function () {
+      controller.abort();
+    }, 3000);
+
+    return fetch("/api/health", {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal
+    })
+      .then(function (response) {
+        if (!response.ok) return false;
+
+        return response.json().then(function (data) {
+          return data && data.status === "ok";
+        });
+      })
+      .catch(function () {
+        return false;
+      })
+      .then(function (available) {
+        clearTimeout(timeoutId);
+        return available;
+      });
+  }
+
+  // Отправляем результат на локальный сервер
+  function sendResultToLocalServer(payload) {
+    return fetch("/api/save-result", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(function (response) {
+        return response.json().catch(function () {
+          return {};
+        }).then(function (data) {
+          if (!response.ok || data.status !== "ok") {
+            throw new Error(data.error || "Ошибка записи CSV");
+          }
+
+          return data;
+        });
+      });
+  }
+
+  // Определяем, куда сохранять результат
+  function saveCompletedResult(payload, record) {
+
+    checkLocalServer().then(function (localAvailable) {
+
+      // Вариант 1. Локальный сервер доступен
+      if (localAvailable) {
+
+        sendResultToLocalServer(payload)
+          .then(function (result) {
+
+            console.log(
+              "Результат сохранен на локальном сервере:",
+              result.file
+            );
+
+            localStorage.removeItem(STORAGE_SESSION);
+
+            showResult(record);
+
+          })
+          .catch(function (error) {
+
+            console.error(
+              "Ошибка сохранения на локальном сервере:",
+              error
+            );
+
+            // Пытаемся сохранить резервную копию в браузере
+            var backupSaved = saveResult(record);
+
+            localStorage.removeItem(STORAGE_SESSION);
+
+            showResult(record);
+
+            alert(
+              backupSaved
+                ? "Не удалось сохранить результат на ноутбуке. " +
+                  "Резервная копия сохранена в браузере этого устройства. " +
+                  "Воспользуйтесь кнопкой экспорта CSV."
+                : "Не удалось сохранить результат на ноутбуке " +
+                  "и в браузере. Сообщите администратору."
+            );
+
+          });
+
+        return;
+      }
+
+      // Вариант 2. Локальный сервер недоступен — используем Firebase
+      try {
+
+        addToPendingResults(payload, record);
+
+        var savedLocally = saveResult(record);
+
+        if (!savedLocally) {
+          throw new Error("Не удалось сохранить резервную копию в браузере");
+        }
+
+        localStorage.removeItem(STORAGE_SESSION);
+
+        showResult(record);
+
+        syncPendingResults();
+
+      } catch (error) {
+
+        console.error(
+          "Ошибка сохранения результата:",
+          error
+        );
+
+        showResult(record);
+
+        alert(
+          "Не удалось сохранить результат. " +
+          "Пожалуйста, сообщите администратору."
+        );
+
+      }
+
+    });
+  }
+
 
   function addToPendingResults(payload, record) {
     var pending = [];
@@ -596,11 +726,24 @@
     try { return JSON.parse(localStorage.getItem(STORAGE_RESULTS) || "[]"); }
     catch (e) { return []; }
   }
+
   function saveResult(rec) {
     var arr = loadResults();
     arr.push(rec);
-    try { localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr)); } catch (e) {}
+
+    try {
+      localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr));
+      return true;
+    } catch (e) {
+      console.error("Ошибка сохранения в localStorage:", e);
+      return false;
+    }
   }
+  // function saveResult(rec) {
+  //   var arr = loadResults();
+  //   arr.push(rec);
+  //   try { localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr)); } catch (e) {}
+  // }
 
   function showResult(rec) {
     showScreen("screen-result");
@@ -650,7 +793,7 @@
       "</div>";
 
     // --- Разбор ответов ---
-    html += '<details style="margin-top:16px"><summary style="margin-bottom: 10px; cursor:pointer; border-bottom: ridge; color: #666;">Показать мои ответы</summary>';
+    html += '<details style="margin-top:16px"><summary style="cursor:pointer; border-bottom: ridge; color: #666;">Показать мои ответы</summary>';
     rec.details.forEach(function (d) {
       html += '<div class="q"><div class="q-text">' + d.number + ". " + escapeHtml(d.text) + "</div>";
       d.answers.forEach(function (a) {

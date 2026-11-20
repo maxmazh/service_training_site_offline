@@ -4,6 +4,7 @@ const path = require('path');
 
 const app = express();
 const PORT = 8080;
+const crypto = require('crypto');
 
 // const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
 
@@ -12,15 +13,16 @@ const basePath = process.pkg
     : __dirname;     
 
 app.use(express.json());
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
 app.use(express.static(basePath));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(basePath, 'index.html'));
 });
 
-
 // --- Вспомогательные функции для записи CSV ---
-
 // Синхронная пауза (для повторов)
 function sleepSync(ms) {
     const start = Date.now();
@@ -45,7 +47,7 @@ function formatRuDateTime(d) {
 }
 
 // Заголовок с BOM (для Excel)
-const CSV_HEADER = '\uFEFF' + 'Дата;Тест;ФИО;Орган;Баллы;Всего;Процент;Оценка;Время (сек)\n';
+const CSV_HEADER = '\uFEFF' + 'Дата;Тест;ФИО;Орган;Баллы;Всего;Процент;Оценка;Время (сек);ID\n';
 
 // Пытается дописать строку в конкретный файл. Возвращает true/false.
 function tryAppend(filePath, line) {
@@ -70,8 +72,7 @@ function saveResultLine(line) {
     const delayMs = 100;
 
     // Сначала пробуем основной файл с повторами
-    const baseDir = process.pkg ? path.dirname(process.execPath) : __dirname;
-    const mainPath = path.join(baseDir, baseName + '.csv');
+    const mainPath = path.join(basePath, baseName + '.csv');
     // const mainPath = path.join(__dirname, baseName + '.csv');
     for (let i = 0; i < maxAttemptsPerFile; i++) {
         if (tryAppend(mainPath, line)) {
@@ -83,7 +84,7 @@ function saveResultLine(line) {
     // Основной файл занят — ищем свободный резервный
     for (let n = 2; n < 1000; n++) {
         const fallbackName = baseName + '_' + n + '.csv';
-        const fallbackPath = path.join(baseDir, fallbackName);
+        const fallbackPath = path.join(basePath, fallbackName);
         // В резервный тоже пробуем несколько раз (на случай, если он тоже открыт)
         for (let i = 0; i < maxAttemptsPerFile; i++) {
             if (tryAppend(fallbackPath, line)) {
@@ -98,7 +99,6 @@ function saveResultLine(line) {
 }
 
 // --- Маршрут сохранения результата ---
-
 app.post('/api/save-result', (req, res) => {
     const result = req.body;
 
@@ -108,6 +108,8 @@ app.post('/api/save-result', (req, res) => {
 
     const timestamp = formatRuDateTime(new Date());
 
+    const id = crypto.randomUUID();
+
     const line = toCsvRow([
         timestamp,
         result.testName,
@@ -116,8 +118,9 @@ app.post('/api/save-result', (req, res) => {
         result.score,
         result.total,
         result.percent,
-        result.passed ? 'Удовлетворительно' : 'Неудовлетворительно',
-        result.spentSec
+        result.passed ? 'Уд' : 'Неуд',
+        result.spentSec,
+        id
     ]);
 
     try {
@@ -127,7 +130,7 @@ app.post('/api/save-result', (req, res) => {
         } else {
             console.log(`[${timestamp}] Результат сохранен в ${saved.file}: ${result.fio} (${result.testName})`);
         }
-        res.json({ status: 'ok', file: saved.file });
+        res.json({ status: 'ok', file: saved.file, id: id });
     } catch (err) {
         console.error('Ошибка записи результата:', err.message);
         res.status(500).json({ error: 'File write error' });
@@ -183,7 +186,7 @@ function readAllResults() {
         // первая строка — заголовок, пропускаем
         for (let i = 1; i < lines.length; i++) {
             const cols = parseCsvLine(lines[i]);
-            if (cols.length < 9) continue;
+            if (cols.length < 10) continue;
             rows.push({
                 date: cols[0],
                 test: cols[1],
@@ -194,6 +197,7 @@ function readAllResults() {
                 percent: Number(cols[6]) || 0,
                 verdict: cols[7],
                 spentSec: Number(cols[8]) || 0,
+                id: cols[9],
                 sourceFile: file
             });
         }
@@ -237,6 +241,120 @@ app.get('/api/results.csv', (req, res) => {
     }
 });
 
+// Удаление одного результата по ID
+app.delete('/api/results/:id', (req, res) => {
+    const id = req.params.id;
+
+    try {
+        const files = fs.readdirSync(basePath)
+            .filter(f => /^results(_\d+)?\.csv$/.test(f));
+
+        let deleted = false;
+
+        for (const file of files) {
+            const filePath = path.join(basePath, file);
+
+            let content = fs.readFileSync(filePath, 'utf8');
+
+            // Убираем BOM
+            if (content.charCodeAt(0) === 0xFEFF) {
+                content = content.slice(1);
+            }
+
+            const lines = content.split(/\r?\n/);
+            const header = lines[0];
+
+            const newLines = [header];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+
+                const cols = parseCsvLine(lines[i]);
+
+                // ID находится в последнем, десятом столбце
+                if (cols[9] === id) {
+                    deleted = true;
+                    continue;
+                }
+
+                newLines.push(lines[i]);
+            }
+
+            if (deleted) {
+                const tempPath = filePath + '.tmp';
+
+                fs.writeFileSync(
+                    tempPath,
+                    '\uFEFF' + newLines.join('\n') + '\n',
+                    'utf8'
+                );
+
+                fs.renameSync(tempPath, filePath);
+
+                break;
+            }
+        }
+
+        if (!deleted) {
+            return res.status(404).json({
+                error: 'Результат не найден'
+            });
+        }
+
+        console.log('Результат удалён:', id);
+
+        res.json({
+            status: 'ok',
+            id: id
+        });
+
+    } catch (err) {
+        console.error('Ошибка удаления результата:', err.message);
+
+        res.status(500).json({
+            error: 'Delete error'
+        });
+    }
+});
+
+// Удаление всех результатов
+app.delete('/api/results', (req, res) => {
+    try {
+        const files = fs.readdirSync(basePath)
+            .filter(f => /^results(_\d+)?\.csv$/.test(f));
+
+        let deletedFiles = 0;
+
+        files.forEach(file => {
+            const filePath = path.join(basePath, file);
+
+            fs.unlinkSync(filePath);
+            deletedFiles++;
+        });
+
+        // Создаём новый пустой основной CSV
+        fs.writeFileSync(
+            path.join(basePath, 'results.csv'),
+            CSV_HEADER,
+            'utf8'
+        );
+
+        console.log('Все результаты удалены. Удалено файлов:', deletedFiles);
+
+        res.json({
+            status: 'ok',
+            deletedFiles: deletedFiles
+        });
+
+    } catch (err) {
+        console.error('Ошибка удаления всех результатов:', err.message);
+
+        res.status(500).json({
+            error: 'Delete all error'
+        });
+    }
+});
+
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Сервер запущен: http://0.0.0.0:${PORT}`);
+    console.log(`Сервер запущен: http://192.168.0.67:${PORT}`);
 });
