@@ -30,7 +30,7 @@ input, select {
 }
 button {
   padding: 11px 24px; font-size: 15px; border: 0;
-  border-radius: 4px; cursor: pointer;
+  border-radius: 4px; cursor: pointer; font-weight: 600;
   background: #2c7be5; color: #fff;
 }
 button:hover { background: #1a5fc0; }
@@ -41,9 +41,11 @@ button.success:hover { background: #1b5e20; }
 button.danger { background: #d9534f; }
 button.danger:hover { background: #b03a36; }
 button:disabled { background: #b0b8c1; cursor: not-allowed; }
+#btn-again { font-size: 16px; padding: 10.5px 24px; border-radius: 8px; }
 
 .muted { color: #666; font-size: 13px; }
-.muted_inf { color: #666; font-size: 18px; }
+.muted_inf { color: #222; font-size: 18px; line-height: 1.15;}
+.muted_inf2 { color: #222; }
 .heading {color: #222; font-size: 14px;}
 .small-mb { margin-bottom: 8px; }
 .bad-text { color: #c62828; }
@@ -101,7 +103,7 @@ button:disabled { background: #b0b8c1; cursor: not-allowed; }
 /* --- Результат --- */
 .result-grid { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
 .result-big { font-size: 44px; font-weight: bold; line-height: 1.05; }
-.verdict { font-size: 22px; font-weight: bold; }
+.verdict { font-size: 22px; font-weight: bold; padding-bottom: 6px;}
 
 /* --- Таблица --- */
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -118,7 +120,6 @@ th { background: #f0f2f5; }
   .nav-buttons button { width: 100%; }
   .nav-buttons .secondary { margin-right: 0; }
 }
-
 
 /* --- Шкала результата --- */
 .score-scale {

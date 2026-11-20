@@ -21,11 +21,11 @@
     }
     .results-toolbar input[type="text"] { min-width: 200px; }
     .results-toolbar button, .results-toolbar a {
-      padding: 10px 16px; border: 0; border-radius: 6px;
+      padding: 10px 16px; font-weight: 600; border: 0; border-radius: 6px;
       background: #2c7be5; color: #fff; cursor: pointer; text-decoration: none;
     }
     .results-toolbar button.secondary { background: #6c757d; }
-    .results-toolbar a.btn-main { background: #2e7d32; }
+    .results-toolbar a.btn-home { font-size: 13.3px; background: #2e7d32; }
     .results-toolbar button:hover { opacity: .9; }
     .results-summary { font-size: 14px; color: #555; margin-bottom: 10px; font-weight: 600; }
     .results-table-wrap { overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
@@ -34,10 +34,18 @@
     th { background: #f7f9fc; position: sticky; top: 0; z-index: 1; cursor: pointer; user-select: none; }
     th:hover { background: #eef2f8; }
     tr:hover td { background: #fafbfd; }
+    .delete-result-btn-td { padding: 3px; }
     .ok { color: #2e7d32; font-weight: 600; }
     .bad { color: #c62828; font-weight: 600; }
     .muted { color: #888; font-weight: 600; }
     .empty { padding: 30px; text-align: center; color: #777; }
+    .delete-result-btn { 
+      display: block; width: 24px; height: 24px; padding: 0; border: none; border-radius: 5px;
+      background: #dc3545; color: #fff; font-size: 22px; line-height: 1; cursor: pointer; margin: 0 auto; 
+    }
+    .delete-result-btn:hover { background: #b02a37; }
+    .results-toolbar button.danger { background: #dc3545; }
+    .results-toolbar button.danger:hover { background: #b02a37; }
   </style>
 </head>
 <body>
@@ -49,8 +57,9 @@
       <option value="">Все тесты</option>
     </select>
     <button id="btn-refresh" class="secondary">Обновить</button>
+    <button id="btn-delete-all" class="danger">Удалить все результаты</button>
     <button id="btn-download">Скачать CSV</button>
-    <a id="btn-main" class="btn-main" href="index.html">На главную</a>
+    <a id="btn-home" class="btn-home" href="index.html">На главную</a>
     <span id="loading" class="muted"></span>
   </div>
   <div class="results-summary" id="summary"></div>
@@ -66,6 +75,7 @@
           <th data-key="percent">%</th>
           <th data-key="verdict">Оценка</th>
           <th data-key="spentSec">Время</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="results-tbody"></tbody>
@@ -105,49 +115,6 @@
     return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]);
   }
 
-  // function load() {
-  //   document.getElementById("loading").textContent = "Загрузка...";
-  //   // Вместо fetch("/api/results")...
-  //   if (typeof db !== "undefined" && db && navigator.onLine) {
-  //     db.collection("results").orderBy("timestamp", "desc").get()
-  //       .then(function(querySnapshot) {
-  //           var rows = [];
-  //           querySnapshot.forEach(function(doc) {
-  //               var data = doc.data();
-  //               // Преобразуем Firestore Timestamp в читаемую строку
-  //               var dateStr = "";
-  //               if (data.timestamp && typeof data.timestamp.toDate === "function") {
-  //                   dateStr = data.timestamp.toDate().toLocaleString('ru-RU');
-  //               } else if (data.finishedAt) {
-  //                 dateStr = new Date(data.finishedAt).toLocaleString("ru-RU");
-  //               }
-  //               rows.push({
-  //                   date: dateStr,
-  //                   test: data.testName || "",
-  //                   fio: data.fio || "",
-  //                   org: data.org || "",
-  //                   score: data.score || 0,
-  //                   total: data.total || 0,
-  //                   percent: data.percent || 0,
-  //                   verdict: data.passed ? "Удовлетворительно" : "Неудовлетворительно",
-  //                   spentSec: data.spentSec || 0
-  //               });
-  //           });
-  //           // Дальше ваш существующий код render() с полученными rows
-  //           allRows = rows;
-  //           fillTestFilter();
-  //           render();
-  //           document.getElementById("loading").textContent = "";
-  //       })
-  //       .catch(function(error) {
-  //           console.error("Ошибка чтения из Firestore: ", error);
-  //           loadFromLocalApi();
-  //       });
-  //     } else {
-  //       loadFromLocalApi();
-  //     }
-  // }
-
   function load() {
     document.getElementById("loading").textContent = "Загрузка...";
 
@@ -186,6 +153,7 @@
               dateStr = new Date(data.finishedAt).toLocaleString("ru-RU");
             }
             rows.push({
+              id: doc.id,
               date: dateStr,
               test: data.testName || "",
               fio: data.fio || "",
@@ -193,7 +161,7 @@
               score: data.score || 0,
               total: data.total || 0,
               percent: data.percent || 0,
-              verdict: data.passed ? "Удовлетворительно" : "Неудовлетворительно",
+              verdict: data.passed ? "Уд" : "Неуд",
               spentSec: data.spentSec || 0
             });
           });
@@ -315,7 +283,7 @@
 
     var html = "";
     rows.forEach(function (r) {
-      var verdictCls = r.verdict === "Удовлетворительно" ? "ok" : "bad";
+      var verdictCls = r.verdict === "Уд" ? "ok" : "bad";
       html += "<tr>" +
         "<td>" + escapeHtml(r.date) + "</td>" +
         "<td>" + escapeHtml(r.test) + "</td>" +
@@ -324,11 +292,217 @@
         "<td>" + r.score + " / " + r.total + "</td>" +
         "<td>" + r.percent + "</td>" +
         '<td class="' + verdictCls + '">' + escapeHtml(r.verdict) + "</td>" +
-        "<td>" + fmtDuration(r.spentSec) + "</td>" +
+        "<td>" + fmtDuration(r.spentSec) + "</td>" + 
+        '<td class="delete-result-btn-td"><button class="delete-result-btn" data-id="' +
+        escapeHtml(r.id) + '" title="Удалить результат">×</button></td>' +
       "</tr>";
     });
     tbody.innerHTML = html;
   }
+
+  function deleteResult(id) {
+      var result = allRows.find(function (r) {
+          return r.id === id;
+      });
+
+      if (!result) {
+          alert("Результат не найден.");
+          return;
+      }
+
+      var confirmed = confirm(
+          "Удалить результат?\n\n" +
+          "ФИО: " + result.fio + "\n" +
+          "Тест: " + result.test + "\n" +
+          "Баллы: " + result.score + " / " + result.total
+      );
+
+      if (!confirmed) return;
+
+      document.getElementById("loading").textContent = "Удаление...";
+
+      db.collection("results").doc(id).delete()
+          .then(function () {
+              // Удаляем запись из локального массива
+              allRows = allRows.filter(function (r) {
+                  return r.id !== id;
+              });
+
+              fillTestFilter();
+              render();
+
+              document.getElementById("loading").textContent =
+                  "Результат успешно удалён.";
+
+              console.log("Результат удалён:", id);
+          })
+          .catch(function (error) {
+              console.error("Ошибка удаления результата:", error);
+
+              document.getElementById("loading").textContent =
+                  "Не удалось удалить результат.";
+
+              alert("Ошибка удаления результата. Проверь подключение и права доступа.");
+          });
+  }
+
+  function deleteAllResults() {
+      var confirmed = confirm(
+          "ВНИМАНИЕ!\n\n" +
+          "Ты действительно хочешь удалить ВСЕ результаты тестирования?\n\n" +
+          "Это действие нельзя отменить."
+      );
+
+      if (!confirmed) return;
+
+      var button = document.getElementById("btn-delete-all");
+
+      button.disabled = true;
+      document.getElementById("loading").textContent =
+          "Удаление всех результатов...";
+
+      // Получаем все документы коллекции, а не только видимые после фильтрации
+      db.collection("results").get()
+          .then(function (snapshot) {
+
+              if (snapshot.empty) {
+                  document.getElementById("loading").textContent =
+                      "В базе нет результатов.";
+
+                  return;
+              }
+
+              var docs = snapshot.docs;
+              var deletePromise = Promise.resolve();
+
+              // Firestore позволяет удалить не более 500 документов
+              // одним batch-запросом
+              for (var i = 0; i < docs.length; i += 500) {
+                  (function (batchDocs) {
+                      deletePromise = deletePromise.then(function () {
+                          var batch = db.batch();
+
+                          batchDocs.forEach(function (doc) {
+                              batch.delete(doc.ref);
+                          });
+
+                          return batch.commit();
+                      });
+                  })(docs.slice(i, i + 500));
+              }
+
+              return deletePromise.then(function () {
+                  allRows = [];
+
+                  fillTestFilter();
+                  render();
+
+                  document.getElementById("loading").textContent =
+                      "Все результаты успешно удалены.";
+
+                  console.log("Удалено документов:", docs.length);
+              });
+          })
+          .catch(function (error) {
+              console.error("Ошибка удаления результатов:", error);
+
+              document.getElementById("loading").textContent =
+                  "Не удалось удалить все результаты.";
+
+              alert(
+                  "Произошла ошибка при удалении результатов. " +
+                  "Проверь подключение и права доступа."
+              );
+          })
+          .finally(function () {
+              button.disabled = false;
+          });
+  }
+
+  function downloadCSV() {
+      // Получаем отфильтрованные и отсортированные результаты
+      var rows = getSorted(getFiltered());
+
+      if (rows.length === 0) {
+          alert("Нет результатов для скачивания.");
+          return;
+      }
+      // Заголовки столбцов
+      var headers = [
+          "Дата",
+          "Тест",
+          "ФИО",
+          "Орган",
+          "Баллы",
+          "Всего баллов",
+          "Процент",
+          "Оценка",
+          "Время"
+      ];
+
+      // Защита значений для CSV
+      function escapeCSV(value) {
+          var text = String(value == null ? "" : value);
+
+          // Защита от формул при открытии CSV в Excel
+          if (/^[\s]*[=+\-@]/.test(text)) {
+              text = "'" + text;
+          }
+
+          // Экранируем кавычки
+          return '"' + text.replace(/"/g, '""') + '"';
+      }
+
+      var csvRows = [headers.map(escapeCSV).join(";")];
+
+      rows.forEach(function (r) {
+          var row = [
+              r.date,
+              r.test,
+              r.fio,
+              r.org,
+              r.score,
+              r.total,
+              r.percent + "%",
+              r.verdict,
+              fmtDuration(r.spentSec)
+          ];
+
+          csvRows.push(row.map(escapeCSV).join(";"));
+      });
+
+      // BOM помогает Excel правильно распознавать UTF-8
+      var csvContent = "\uFEFF" + csvRows.join("\r\n");
+
+      var blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;"
+      });
+
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement("a");
+
+      link.href = url;
+      link.download = "results_" +
+          new Date().toISOString().slice(0, 10) + ".csv";
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("results-tbody")
+    .addEventListener("click", function (event) {
+
+        var button = event.target.closest(".delete-result-btn");
+
+        if (!button) return;
+
+        var id = button.getAttribute("data-id");
+
+        deleteResult(id);
+    });
 
   // Сортировка по клику на заголовок
   document.querySelectorAll("#results-table th").forEach(function (th) {
@@ -340,12 +514,11 @@
     });
   });
 
+  document.getElementById("btn-delete-all").addEventListener("click", deleteAllResults);
   document.getElementById("filter-text").addEventListener("input", render);
   document.getElementById("filter-test").addEventListener("change", render);
   document.getElementById("btn-refresh").addEventListener("click", load);
-  document.getElementById("btn-download").addEventListener("click", function () {
-    window.location.href = "/api/results.csv";
-  });
+  document.getElementById("btn-download").addEventListener("click", downloadCSV)
 
   load();
 })();

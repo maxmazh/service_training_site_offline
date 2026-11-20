@@ -16,7 +16,7 @@
 }
 
 body {
-    font-family: Montserrat;
+    font-family: 'Montserrat';
     color: #000;
 }
 
@@ -42,6 +42,8 @@ h2 {
     font-weight: 600;
 }
 
+button, a { font-family: 'Montserrat'; }
+
 .wallpaper_btn {
     display: flex;
     flex-direction: column;
@@ -49,10 +51,6 @@ h2 {
     gap: 20px;
 }
 
-/* button {
-    width: 50%;
-    cursor: pointer;
-} */
 .fire_btn {
     margin-bottom: 30px;
 }
@@ -97,7 +95,7 @@ nav {
     padding: 12px 24px;
     background-color: #228B22;
     color: white;
-    font-weight: 500;
+    font-weight: 600;
     text-decoration: none;
     border-radius: 8px;
     font-size: 16px;
@@ -111,7 +109,6 @@ nav {
 }
 
 .btn-back {
-    /* height: 56px; */
     padding: 10.7px 24px;
     border: none;
     cursor: pointer;

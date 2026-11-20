@@ -7,8 +7,9 @@
   var LIMIT_SECONDS = LIMIT_MINUTES * 60;
   var PASS_PERCENT = 80;
   var TEST_KEY = (window.test && test.NameUrl) ? test.NameUrl : "test";
-var STORAGE_RESULTS = "otp_results_" + TEST_KEY;
-var STORAGE_SESSION = "otp_session_" + TEST_KEY;
+  var STORAGE_RESULTS = "otp_results_" + TEST_KEY;
+  var STORAGE_SESSION = "otp_session_" + TEST_KEY;
+  var STORAGE_PENDING = "otp_pending_" + TEST_KEY;
 
   // ====== СОСТОЯНИЕ ======
   var state = {
@@ -105,7 +106,7 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
 
   // ====== ЭКРАНЫ ======
   function showScreen(id) {
-    ["screen-reg", "screen-test", "screen-result", "screen-list"].forEach(function (s) {
+    ["screen-reg", "screen-test", "screen-result"].forEach(function (s) {
       $(s).classList.toggle("hidden", s !== id);
     });
   }
@@ -368,86 +369,81 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       details: details
     };
 
-      var resultForCloud = {
-        testName: test.Name || 'Неизвестный тест',
-        fio: record.fio,
-        org: record.org,
-        score: record.score,
-        total: record.total,
-        percent: record.percent,
-        passed: record.passed,
-        spentSec: record.spentSec,
-        // timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      };
+    var resultForCloud = {
+      testName: test.Name || 'Неизвестный тест',
+      fio: record.fio,
+      org: record.org,
+      score: record.score,
+      total: record.total,
+      percent: record.percent,
+      passed: record.passed,
+      spentSec: record.spentSec,
+    };
 
-      // --- 1. Пробуем сохранить в Firestore (основной режим) ---
-      // Проверяем, что firebase и db доступны (их инициализация — в firebase-config.js)
-      var cloudPromise;
-        if (typeof db !== "undefined" && db && navigator.onLine) {
-          var cloudData = Object.assign({}, resultForCloud, {
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-          });
-          cloudPromise = db.collection("results").add(cloudData)
-            .then(function (docRef) {
-              return docRef.get({ source: "server" }).then(function (snap) {
-                if (!snap.exists) throw new Error("Запись не подтверждена сервером");
-                return docRef;
-              });
-            });
-        } else {
-          cloudPromise = Promise.reject(new Error("Firebase недоступен"));
-        }
+    // 1. Сохраняем результат в собственную очередь
+    try {
 
-        cloudPromise
-          .then(function (docRef) {
-            console.log("Результат подтверждён сервером, ID:", docRef.id);
-            clearLocalAfterSuccess();
-            showResult(record);
-          })
-          .catch(function (err) {
-            console.warn("Сервер не подтвердил запись, сохраняем локально:", err.message);
-            saveToLocalFallback(resultForCloud, record);
-          });
+      addToPendingResults(resultForCloud, record);
+
+      saveResult(record);
+
+      localStorage.removeItem(STORAGE_SESSION);
+
+      showResult(record);
+
+      syncPendingResults();
+
+    } catch (error) {
+
+      console.error(
+        "Критическая ошибка локального сохранения:",
+        error
+      );
+
+      showResult(record);
+
+      alert(
+        "Не удалось сохранить результат локально. " +
+        "Пожалуйста, не закрывайте страницу и сообщите администратору."
+      );
+    }
+  }
+
+  function addToPendingResults(payload, record) {
+    var pending = [];
+
+    try {
+      pending = JSON.parse(
+        localStorage.getItem(STORAGE_PENDING) || "[]"
+      );
+    } catch (e) {
+      pending = [];
     }
 
-    //     cloudPromise
-    //         .then(function (docRef) {
-    //             console.log("Результат сохранён в Firestore, ID:", docRef.id);
-    //             clearLocalAfterSuccess();
-    //             showResult(record);
-    //         })
-    //         .catch(function (err) {
-    //             console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
-    //             saveToLocalFallback(resultForCloud, record);
-    //         });
+    var item = {
+      id: generateResultId(),
+      payload: payload,
+      record: record
+    };
 
+    pending.push(item);
 
-    //   var cloudPromise;
-    //   if (typeof db !== "undefined" && db && navigator.onLine) {
-    //     // Для Firestore добавляем серверный timestamp отдельным полем
-    //     var cloudData = Object.assign({}, resultForCloud, {
-    //       timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    //     });
-    //     cloudPromise = db.collection("results").add(cloudData);
-    //   } else {
-    //     // Firebase не инициализирован или нет сети — сразу идём в fallback
-    //     cloudPromise = Promise.reject(new Error("Firebase недоступен или нет сети"));
-    //   }
+    localStorage.setItem(
+      STORAGE_PENDING,
+      JSON.stringify(pending)
+    );
 
-    //   cloudPromise
-    //     .then(function (docRef) {
-    //       // Успешно сохранили в облако
-    //       console.log("Результат сохранён в Firestore, ID:", docRef.id);
-    //       clearLocalAfterSuccess();
-    //       showResult(record);
-    //     })
-    //     .catch(function (err) {
-    //       // Не удалось сохранить в облако — сохраняем локально
-    //       console.warn("Firestore недоступен, сохраняем локально:", err.message || err);
-    //       saveToLocalFallback(resultForCloud, record);
-    //     });
-    // }
+    return item;
+  }
 
+  function generateResultId() {
+    if (window.crypto && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+
+    return Date.now() + "_" +
+      Math.random().toString(36).slice(2);
+  }
   // Очистка localStorage после успешного сохранения в облако
   function clearLocalAfterSuccess() {
     try {
@@ -456,72 +452,16 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     } catch (e) {}
   }
 
-  function saveToLocalFallback(payloadObj, record) {
-    // 1. СНАЧАЛА гарантированно сохраняем в localStorage
-    try {
-      saveResult(record); // пишет в STORAGE_RESULTS
-    } catch (e) {
-      console.error("Не удалось сохранить в localStorage:", e);
-    }
-
-    // 2. Потом пробуем отправить на локальный сервер (если он есть)
-    var payload = JSON.stringify(payloadObj);
-    var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-    var timer = setTimeout(function () {
-      if (controller) controller.abort();
-    }, 2000);
-
-    fetch("/api/save-result", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-      signal: controller ? controller.signal : undefined
-    })
-      .then(function (r) {
-        clearTimeout(timer);
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        // Успешно отправили на локальный сервер — можно удалить из localStorage
-        removeFromLocalResults(record);
-        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-      })
-      .catch(function () {
-        clearTimeout(timer);
-        // Не удалось отправить — результат УЖЕ в localStorage, ничего не теряем
-        try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-      })
-      .finally(function () {
-        showResult(record);
-      });
-  }
-
-  // Удаляет конкретный результат из localStorage (по совпадению полей)
-  function removeFromLocalResults(record) {
-    try {
-      var arr = loadResults();
-      var idx = arr.findIndex(function (r) {
-        return r.fio === record.fio && r.startedAt === record.startedAt && r.score === record.score;
-      });
-      if (idx !== -1) {
-        arr.splice(idx, 1);
-        localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr));
-      }
-    } catch (e) {}
-  }
-  // Резервное сохранение: сначала пробуем локальный сервер, потом localStorage
   // function saveToLocalFallback(payloadObj, record) {
-  //   var payload = JSON.stringify(payloadObj);
-
-  //   function doLocalStorage() {
-  //     try {
-  //       saveResult(record); // ваша старая функция, пишет в STORAGE_RESULTS
-  //     } catch (e) {}
-  //     try {
-  //       localStorage.removeItem(STORAGE_SESSION);
-  //     } catch (e) {}
-  //     showResult(record);
+  //   // 1. СНАЧАЛА гарантированно сохраняем в localStorage
+  //   try {
+  //     saveResult(record); // пишет в STORAGE_RESULTS
+  //   } catch (e) {
+  //     console.error("Не удалось сохранить в localStorage:", e);
   //   }
 
-  //   // Пробуем отправить на локальный /api/save-result (если запущен server.exe)
+  //   // 2. Потом пробуем отправить на локальный сервер (если он есть)
+  //   var payload = JSON.stringify(payloadObj);
   //   var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
   //   var timer = setTimeout(function () {
   //     if (controller) controller.abort();
@@ -536,68 +476,120 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
   //     .then(function (r) {
   //       clearTimeout(timer);
   //       if (!r.ok) throw new Error("HTTP " + r.status);
+  //       // Успешно отправили на локальный сервер — можно удалить из localStorage
+  //       removeFromLocalResults(record);
   //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-  //       showResult(record);
   //     })
   //     .catch(function () {
   //       clearTimeout(timer);
-  //       // Сервер недоступен (GitHub Pages, нет server.exe, таймаут) — сохраняем в localStorage
-  //       doLocalStorage();
-  //     });
-  // }
-
-  //   if (navigator.sendBeacon) {
-  //     var ok = navigator.sendBeacon(
-  //       "/api/save-result",
-  //       new Blob([payload], { type: "application/json" })
-  //     );
-  //     if (ok) {
-  //       // sendBeacon не даёт подтверждения, но если вернул true — запрос поставлен в очередь
+  //       // Не удалось отправить — результат УЖЕ в localStorage, ничего не теряем
   //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-  //       showResult(record);
-  //       return;
-  //     }
-  //     // sendBeacon вернул false — идём в localStorage
-  //     doLocalStorage();
-  //     return;
-  //   }
-
-  //   fetch("/api/save-result", {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: payload,
-  //     keepalive: true
-  //   })
-  //     .then(function (r) {
-  //       if (!r.ok) throw new Error("HTTP " + r.status);
-  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-  //       showResult(record);
   //     })
-  //     .catch(function () {
-  //       doLocalStorage();
+  //     .finally(function () {
+  //       showResult(record);
   //     });
   // }
 
-  //     if (navigator.sendBeacon) {
-  //         navigator.sendBeacon('/api/save-result',
-  //             new Blob([payload], { type: 'application/json' }));
-  //     } else {
-  //         fetch('/api/save-result', {
-  //             method: 'POST',
-  //             headers: { 'Content-Type': 'application/json' },
-  //             body: payload,
-  //             keepalive: true
-  //         }).catch(function (err) { console.error('Ошибка отправки:', err); });
-  //     }
-  //   } catch (e) {}
+  // Удаляет конкретный результат из localStorage (по совпадению полей)
+  function removeFromLocalResults(record) {
+    try {
+      var arr = loadResults();
 
-  //   try {
-  //     localStorage.removeItem(STORAGE_SESSION);
-  //     localStorage.removeItem(STORAGE_RESULTS);
-  //   } catch (e) {}
+      var idx = arr.findIndex(function(r) {
+        return r.fio === record.fio &&
+              r.startedAt === record.startedAt &&
+              r.score === record.score;
+      });
 
-  //   showResult(record);
-  // }
+      if (idx !== -1) {
+        arr.splice(idx, 1);
+      }
+
+      if (arr.length === 0) {
+        localStorage.removeItem(STORAGE_RESULTS);
+      } else {
+        localStorage.setItem(
+          STORAGE_RESULTS,
+          JSON.stringify(arr)
+        );
+      }
+
+    } catch (e) {
+      console.error("Ошибка удаления локального результата:", e);
+    }
+  }
+
+  function getPendingResults() {
+    try {
+      return JSON.parse(
+        localStorage.getItem(STORAGE_PENDING) || "[]"
+      );
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function removePendingResult(id) {
+    var pending = getPendingResults();
+
+    pending = pending.filter(function(item) {
+      return item.id !== id;
+    });
+
+    if (pending.length === 0) {
+      localStorage.removeItem(STORAGE_PENDING);
+    } else {
+      localStorage.setItem(
+        STORAGE_PENDING,
+        JSON.stringify(pending)
+      );
+    }
+  }
+
+  function syncPendingResults() {
+    if (!window.db || !navigator.onLine) {
+      return;
+    }
+
+    window.firestoreReady.then(function() {
+
+      var pending = getPendingResults();
+
+      pending.forEach(function(item) {
+
+        window.db
+          .collection("results")
+          .doc(item.id)
+          .set(Object.assign({}, item.payload, {
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          }))
+          .then(function() {
+
+            console.log(
+              "Результат успешно отправлен:",
+              item.id
+            );
+
+            // Удаляем из очереди только после подтверждения сервера
+            removePendingResult(item.id);
+
+            // Удаляем локальную копию результата
+            removeFromLocalResults(item.record);
+
+          })
+          .catch(function(error) {
+
+            console.warn(
+              "Не удалось отправить результат:",
+              error
+            );
+
+          });
+
+      });
+
+    });
+  }
 
   // ====== РЕЗУЛЬТАТЫ ======
   function loadResults() {
@@ -609,7 +601,6 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     arr.push(rec);
     try { localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr)); } catch (e) {}
   }
-
 
   function showResult(rec) {
     showScreen("screen-result");
@@ -630,7 +621,6 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
           '<div class="score-scale__fill ' + scaleClass + '" style="width:' + rec.percent + '%"></div>' +
           '<div class="score-scale__threshold"></div>' +
         '</div>' +
-        // '<div class="score-scale__threshold-label">порог 80%</div>' +
         '<div class="score-scale__value ' + scaleClass + '">' +
           rec.percent + '% — ' + scaleLabel +
         '</div>' +
@@ -653,12 +643,14 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
         "Окончание: " + new Date(rec.finishedAt).toLocaleString() + "<br>" +
         "Потрачено: " + fmtDuration(rec.spentSec) +
         (rec.timeUp ? " (время вышло)" : "") + "<br>" + "<br>" +
-        "Удовлетворительно, если набрали 80% и более" + "<br>" +
-        "Неудовлетворительно, если менее 80%"
+          '<div class="muted_inf2">' +
+            "Удовлетворительно, если набрали 80% и более" + "<br>" +
+            "Неудовлетворительно, если менее 80%" +
+          "</div>" +
       "</div>";
 
     // --- Разбор ответов ---
-    html += '<details style="margin-top:16px"><summary style="cursor:pointer">Показать мои ответы</summary>';
+    html += '<details style="margin-top:16px"><summary style="margin-bottom: 10px; cursor:pointer; border-bottom: ridge; color: #666;">Показать мои ответы</summary>';
     rec.details.forEach(function (d) {
       html += '<div class="q"><div class="q-text">' + d.number + ". " + escapeHtml(d.text) + "</div>";
       d.answers.forEach(function (a) {
@@ -672,73 +664,6 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     html += "</details>";
 
     $("result-body").innerHTML = html;
-  }
-
-  // function showResult(rec) {
-  //   showScreen("screen-result");
-
-  //   var verdict = rec.passed
-  //     ? '<div class="verdict ok-text">Удовлетворительно</div>'
-  //     : '<div class="verdict bad-text">Неудовлетворительно</div>';
-
-  //   var html =
-  //     '<div class="result-grid">' +
-  //       '<div><div class="muted">Правильных ответов</div>' +
-  //         '<div class="result-big">' + rec.score + " / " + rec.total + "</div></div>" +
-  //       '<div><div class="muted">Процент</div>' +
-  //         '<div class="result-big">' + rec.percent + "%</div></div>" +
-  //       "<div>" + verdict + "</div>" +
-  //     "</div>" +
-  //     '<div class="muted_inf" style="margin-top:12px">' +
-  //       "ФИО: " + escapeHtml(rec.fio) + "<br>" +
-  //       "Орган: " + escapeHtml(rec.org) + "<br>" +
-  //       "Начало: " + new Date(rec.startedAt).toLocaleString() + "<br>" +
-  //       "Окончание: " + new Date(rec.finishedAt).toLocaleString() + "<br>" +
-  //       "Потрачено: " + fmtDuration(rec.spentSec) +
-  //       (rec.timeUp ? " (время вышло)" : "") +
-  //     "</div>";
-
-  //   html += '<details style="margin-top:16px"><summary style="cursor:pointer">Показать мои ответы</summary>';
-  //   rec.details.forEach(function (d) {
-  //     html += '<div class="q"><div class="q-text">' + d.number + ". " + escapeHtml(d.text) + "</div>";
-  //     d.answers.forEach(function (a) {
-  //       var cls = "ans";
-  //       if (d.rightIds.indexOf(a.id) !== -1) cls += " correct";
-  //       else if (d.chosenId === a.id) cls += " wrong";
-  //       html += '<div class="' + cls + '">' + escapeHtml(a.text) + "</div>";
-  //     });
-  //     html += "</div>";
-  //   });
-  //   html += "</details>";
-
-  //   $("result-body").innerHTML = html;
-  // }
-
-  function showList() {
-    showScreen("screen-list");
-    var arr = loadResults();
-    if (arr.length === 0) {
-      $("results-table").innerHTML = '<div class="muted">Пока нет результатов.</div>';
-      return;
-    }
-    var html = "<table><thead><tr>" +
-      "<th>#</th><th>ФИО</th><th>Орган</th><th>Баллы</th><th>%</th><th>Оценка</th><th>Начало</th><th>Потрачено</th>" +
-      "</tr></thead><tbody>";
-    arr.forEach(function (r, i) {
-      html += "<tr>" +
-        "<td>" + (i + 1) + "</td>" +
-        "<td>" + escapeHtml(r.fio) + "</td>" +
-        "<td>" + escapeHtml(r.org) + "</td>" +
-        "<td>" + r.score + " / " + r.total + "</td>" +
-        "<td>" + r.percent + "</td>" +
-        '<td class="' + (r.passed ? "ok-text" : "bad-text") + '">' +
-          (r.passed ? "удовл." : "неудовл.") + "</td>" +
-        "<td>" + new Date(r.startedAt).toLocaleString() + "</td>" +
-        "<td>" + fmtDuration(r.spentSec) + "</td>" +
-      "</tr>";
-    });
-    html += "</tbody></table>";
-    $("results-table").innerHTML = html;
   }
 
   function exportCsv() {
@@ -770,7 +695,6 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
     URL.revokeObjectURL(url);
   }
 
-
     // ====== ИНИЦИАЛИЗАЦИЯ ======
   function init() {
     if (!window.test) {
@@ -796,17 +720,11 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
       location.reload();
     });
-    bind("btn-view-results", showList);
+    // bind("btn-view-results", showList);
     bind("btn-back", function () {
       showScreen("screen-result");
     });
     bind("btn-export", exportCsv);
-    bind("btn-clear", function () {
-      if (confirm("Удалить все сохранённые результаты?")) {
-        try { localStorage.removeItem(STORAGE_RESULTS); } catch (e) {}
-        showList();
-      }
-    });
 
     // Восстановление сессии — выполняется в любом случае,
     // даже если каких-то кнопок нет на странице
@@ -819,6 +737,16 @@ var STORAGE_SESSION = "otp_session_" + TEST_KEY;
       startTimer();
     }
   }
+
+  window.addEventListener("online", function() {
+    console.log("Интернет восстановлен. Отправляем результаты...");
+
+    syncPendingResults();
+  });
+
+  window.addEventListener("load", function() {
+    syncPendingResults();
+  });
 
   document.addEventListener("DOMContentLoaded", init);
 })();
