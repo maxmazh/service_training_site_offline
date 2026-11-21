@@ -1,3 +1,27 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  doc,
+  deleteDoc,
+  writeBatch,
+  setDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCC20gldUQGnq_ctVGSSomlS1Srk-K1Bxw",
@@ -8,32 +32,42 @@ const firebaseConfig = {
   appId: "1:360644610762:web:2ca938c59a2e9efece4233"
 };
 
-// Initialize Firebase
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
+// 1. Инициализация Firebase
+const app = initializeApp(firebaseConfig);
 
-const db = firebase.firestore();
-window.db = db;
+// 2. Инициализация Authentication
+const auth = getAuth(app);
 
-// Authentication
-if (typeof firebase.auth === "function") {
-    const auth = firebase.auth();
-    window.auth = auth;
-}
-
-// Firestore Offline Persistence
-window.firestoreReady = db.enablePersistence({
-  synchronizeTabs: true
-})
-  .then(function() {
-    console.log(
-      "Firestore Offline Persistence включена (Multi-Tab)"
-    );
+// 3. Инициализация Firestore
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
   })
-  .catch(function(err) {
-    console.warn(
-      "Offline Persistence недоступна:",
-      err.code
-    );
-  });
+});
+
+// Передаём Authentication остальному коду сайта
+window.auth = auth;
+
+window.firebaseAuthApi = {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+};
+
+// Передаём Firestore остальному коду сайта
+window.firestoreApi = {
+  db,
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  doc,
+  deleteDoc,
+  writeBatch,
+  setDoc,
+  serverTimestamp
+};
+
+// Сообщаем, что Firestore готов
+window.firestoreReady = Promise.resolve();
+console.log("Firebase успешно инициализирован");

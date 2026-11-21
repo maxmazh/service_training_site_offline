@@ -244,73 +244,53 @@ app.get('/api/results.csv', (req, res) => {
 // Удаление одного результата по ID
 app.delete('/api/results/:id', (req, res) => {
     const id = req.params.id;
-
     try {
         const files = fs.readdirSync(basePath)
             .filter(f => /^results(_\d+)?\.csv$/.test(f));
-
         let deleted = false;
-
         for (const file of files) {
             const filePath = path.join(basePath, file);
-
             let content = fs.readFileSync(filePath, 'utf8');
-
             // Убираем BOM
             if (content.charCodeAt(0) === 0xFEFF) {
                 content = content.slice(1);
             }
-
             const lines = content.split(/\r?\n/);
             const header = lines[0];
-
             const newLines = [header];
-
             for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
-
                 const cols = parseCsvLine(lines[i]);
-
                 // ID находится в последнем, десятом столбце
                 if (cols[9] === id) {
                     deleted = true;
                     continue;
                 }
-
                 newLines.push(lines[i]);
             }
-
             if (deleted) {
                 const tempPath = filePath + '.tmp';
-
                 fs.writeFileSync(
                     tempPath,
                     '\uFEFF' + newLines.join('\n') + '\n',
                     'utf8'
                 );
-
                 fs.renameSync(tempPath, filePath);
-
                 break;
             }
         }
-
         if (!deleted) {
             return res.status(404).json({
                 error: 'Результат не найден'
             });
         }
-
         console.log('Результат удалён:', id);
-
         res.json({
             status: 'ok',
             id: id
         });
-
     } catch (err) {
         console.error('Ошибка удаления результата:', err.message);
-
         res.status(500).json({
             error: 'Delete error'
         });
@@ -322,33 +302,25 @@ app.delete('/api/results', (req, res) => {
     try {
         const files = fs.readdirSync(basePath)
             .filter(f => /^results(_\d+)?\.csv$/.test(f));
-
         let deletedFiles = 0;
-
         files.forEach(file => {
             const filePath = path.join(basePath, file);
-
             fs.unlinkSync(filePath);
             deletedFiles++;
         });
-
         // Создаём новый пустой основной CSV
         fs.writeFileSync(
             path.join(basePath, 'results.csv'),
             CSV_HEADER,
             'utf8'
         );
-
         console.log('Все результаты удалены. Удалено файлов:', deletedFiles);
-
         res.json({
             status: 'ok',
             deletedFiles: deletedFiles
         });
-
     } catch (err) {
         console.error('Ошибка удаления всех результатов:', err.message);
-
         res.status(500).json({
             error: 'Delete all error'
         });

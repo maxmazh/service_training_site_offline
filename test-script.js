@@ -61,10 +61,8 @@
     if (!window.test || !test.Questions) return [];
     var byId = {};
     test.Questions.forEach(function (q) { byId[q.Id] = q; });
-
     var chosen = [];
     var used = {};
-
     (test.groups || []).forEach(function (g) {
       var pool = [];
       (g.questions || []).forEach(function (qid) {
@@ -79,7 +77,6 @@
         used[q.Id] = true;
       });
     });
-
     var total = test.LimitedQuestionsCount || 20;
     if (test.IsLimitedQuestions && chosen.length < total) {
       var rest = test.Questions.filter(function (q) { return !used[q.Id]; });
@@ -89,9 +86,7 @@
         used[q.Id] = true;
       });
     }
-
     if (test.IsRandomQuestions) shuffle(chosen);
-
     chosen.forEach(function (q) {
       if ((test.IsRandomAnswersInAllQuestions || q.RandomAnswersSequence) &&
           q.AnswerTemplates && q.AnswerTemplates.length > 1 &&
@@ -99,7 +94,6 @@
         shuffle(q.AnswerTemplates);
       }
     });
-
     chosen.forEach(function (q, i) { q.Number = i + 1; });
     return chosen;
   }
@@ -114,9 +108,6 @@
   // ====== РЕГИСТРАЦИЯ ======
   function initRegScreen() {
     $("test-title").textContent = test.Name || "Тест";
-    // var instr = (test.Instructions || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    // $("test-instr").textContent = instr;
-
     var orgSel = $("org");
     orgSel.innerHTML = '<option value="">— выберите —</option>';
     var regParam = (test.InitialParameters || []).find(function (p) {
@@ -153,7 +144,6 @@
     $("t-user").textContent = state.fio;
     $("t-org").textContent = state.org;
     $("q-total").textContent = state.questions.length;
-
     renderCurrentQuestion();
     startTimer();
   }
@@ -163,22 +153,17 @@
     var total = state.questions.length;
     var idx = state.currentIndex;
     var q = state.questions[idx];
-
     // Счётчик и прогресс
     $("q-current").textContent = idx + 1;
     $("progress-fill").style.width = Math.round((idx + 1) / total * 100) + "%";
-
     // Хост вопроса
     var host = $("question-host");
     host.innerHTML = "";
-
     var div = document.createElement("div");
     div.className = "q";
-
     var html = '<div class="q-text">' +
       q.Number + ". " + escapeHtml(stripHtml(q.Text || "")) +
       "</div>";
-
     var chosenId = state.answers[q.Id];
     (q.AnswerTemplates || []).forEach(function (a) {
       var checked = chosenId === a.Id;
@@ -189,10 +174,8 @@
           escapeHtml(stripHtml(a.Text || "")) +
         "</label>";
     });
-
     div.innerHTML = html;
     host.appendChild(div);
-
     div.querySelectorAll('input[type="radio"]').forEach(function (inp) {
       inp.addEventListener("change", function () {
         state.answers[q.Id] = Number(inp.value);
@@ -201,13 +184,11 @@
         saveSession();
       });
     });
-
     // Кнопки
     $("btn-prev").disabled = idx === 0;
     var isLast = idx === total - 1;
     $("btn-next").classList.toggle("hidden", isLast);
     $("btn-finish").classList.toggle("hidden", !isLast);
-
     // Автоскролл наверх страницы
     window.scrollTo({ top: 0, behavior: "smooth" });
     $("test-error").textContent = "";
@@ -295,6 +276,7 @@
     tick();
     state.timerId = setInterval(tick, 500);
   }
+
   function stopTimer() {
     if (state.timerId) { clearInterval(state.timerId); state.timerId = null; }
   }
@@ -304,14 +286,11 @@
     // Защита от повторного вызова
     if (state.isFinishing) return;
     state.isFinishing = true;
-
     // Блокируем кнопку «Завершить» (и на всякий случай «Далее»)
     var btnFinish = $("btn-finish");
     if (btnFinish) { btnFinish.disabled = true; btnFinish.textContent = "Отправка..."; }
     var btnNext = $("btn-next");
     if (btnNext) btnNext.disabled = true;
-
-
     if (!timeUp) {
       var unanswered = state.questions.filter(function (q) {
         return state.answers[q.Id] == null;
@@ -326,9 +305,7 @@
         return;
       }
     }
-
     stopTimer();
-
     var score = 0;
     var details = state.questions.map(function (q) {
       var chosenId = state.answers[q.Id];
@@ -348,13 +325,11 @@
         })
       };
     });
-
     var total = state.questions.length;
     var percent = total > 0 ? Math.round(score / total * 100) : 0;
     var passed = percent >= PASS_PERCENT;
     var finishedAt = Date.now();
     var spentSec = Math.round((finishedAt - state.startedAt) / 1000);
-
     var record = {
       fio: state.fio,
       org: state.org,
@@ -368,7 +343,6 @@
       timeUp: !!timeUp,
       details: details
     };
-
     var resultForCloud = {
       testName: test.Name || 'Неизвестный тест',
       fio: record.fio,
@@ -379,37 +353,15 @@
       passed: record.passed,
       spentSec: record.spentSec,
     };
-
     saveCompletedResult(resultForCloud, record);
   }
-    // 1. Сохраняем результат в собственную очередь
-    // try {
-    //   addToPendingResults(resultForCloud, record);
-    //   saveResult(record);
-    //   localStorage.removeItem(STORAGE_SESSION);
-    //   showResult(record);
-    //   syncPendingResults();
-    // } catch (error) {
-    //   console.error(
-    //     "Критическая ошибка локального сохранения:",
-    //     error
-    //   );
-    //   showResult(record);
-    //   alert(
-    //     "Не удалось сохранить результат локально. " +
-    //     "Пожалуйста, не закрывайте страницу и сообщите администратору."
-    //   );
-    // }
-
   // ====== ВЫБОР ХРАНИЛИЩА РЕЗУЛЬТАТОВ ======
   // Проверяем доступность локального Node.js-сервера
   function checkLocalServer() {
     var controller = new AbortController();
-
     var timeoutId = setTimeout(function () {
       controller.abort();
     }, 3000);
-
     return fetch("/api/health", {
       method: "GET",
       cache: "no-store",
@@ -417,7 +369,6 @@
     })
       .then(function (response) {
         if (!response.ok) return false;
-
         return response.json().then(function (data) {
           return data && data.status === "ok";
         });
@@ -447,7 +398,6 @@
           if (!response.ok || data.status !== "ok") {
             throw new Error(data.error || "Ошибка записи CSV");
           }
-
           return data;
         });
       });
@@ -455,39 +405,27 @@
 
   // Определяем, куда сохранять результат
   function saveCompletedResult(payload, record) {
-
     checkLocalServer().then(function (localAvailable) {
-
       // Вариант 1. Локальный сервер доступен
       if (localAvailable) {
-
         sendResultToLocalServer(payload)
           .then(function (result) {
-
             console.log(
               "Результат сохранен на локальном сервере:",
               result.file
             );
-
             localStorage.removeItem(STORAGE_SESSION);
-
             showResult(record);
-
           })
           .catch(function (error) {
-
             console.error(
               "Ошибка сохранения на локальном сервере:",
               error
             );
-
             // Пытаемся сохранить резервную копию в браузере
             var backupSaved = saveResult(record);
-
             localStorage.removeItem(STORAGE_SESSION);
-
             showResult(record);
-
             alert(
               backupSaved
                 ? "Не удалось сохранить результат на ноутбуке. " +
@@ -496,52 +434,36 @@
                 : "Не удалось сохранить результат на ноутбуке " +
                   "и в браузере. Сообщите администратору."
             );
-
           });
-
         return;
       }
-
       // Вариант 2. Локальный сервер недоступен — используем Firebase
       try {
-
         addToPendingResults(payload, record);
-
         var savedLocally = saveResult(record);
-
         if (!savedLocally) {
           throw new Error("Не удалось сохранить резервную копию в браузере");
         }
-
         localStorage.removeItem(STORAGE_SESSION);
-
         showResult(record);
-
         syncPendingResults();
-
       } catch (error) {
-
         console.error(
           "Ошибка сохранения результата:",
           error
         );
-
         showResult(record);
-
         alert(
           "Не удалось сохранить результат. " +
           "Пожалуйста, сообщите администратору."
         );
-
       }
-
     });
   }
 
 
   function addToPendingResults(payload, record) {
     var pending = [];
-
     try {
       pending = JSON.parse(
         localStorage.getItem(STORAGE_PENDING) || "[]"
@@ -549,20 +471,16 @@
     } catch (e) {
       pending = [];
     }
-
     var item = {
       id: generateResultId(),
       payload: payload,
       record: record
     };
-
     pending.push(item);
-
     localStorage.setItem(
       STORAGE_PENDING,
       JSON.stringify(pending)
     );
-
     return item;
   }
 
@@ -570,7 +488,6 @@
     if (window.crypto && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-
     return Date.now() + "_" +
       Math.random().toString(36).slice(2);
   }
@@ -581,60 +498,18 @@
       localStorage.removeItem(STORAGE_RESULTS);
     } catch (e) {}
   }
-
-  // function saveToLocalFallback(payloadObj, record) {
-  //   // 1. СНАЧАЛА гарантированно сохраняем в localStorage
-  //   try {
-  //     saveResult(record); // пишет в STORAGE_RESULTS
-  //   } catch (e) {
-  //     console.error("Не удалось сохранить в localStorage:", e);
-  //   }
-
-  //   // 2. Потом пробуем отправить на локальный сервер (если он есть)
-  //   var payload = JSON.stringify(payloadObj);
-  //   var controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-  //   var timer = setTimeout(function () {
-  //     if (controller) controller.abort();
-  //   }, 2000);
-
-  //   fetch("/api/save-result", {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: payload,
-  //     signal: controller ? controller.signal : undefined
-  //   })
-  //     .then(function (r) {
-  //       clearTimeout(timer);
-  //       if (!r.ok) throw new Error("HTTP " + r.status);
-  //       // Успешно отправили на локальный сервер — можно удалить из localStorage
-  //       removeFromLocalResults(record);
-  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-  //     })
-  //     .catch(function () {
-  //       clearTimeout(timer);
-  //       // Не удалось отправить — результат УЖЕ в localStorage, ничего не теряем
-  //       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
-  //     })
-  //     .finally(function () {
-  //       showResult(record);
-  //     });
-  // }
-
   // Удаляет конкретный результат из localStorage (по совпадению полей)
   function removeFromLocalResults(record) {
     try {
       var arr = loadResults();
-
       var idx = arr.findIndex(function(r) {
         return r.fio === record.fio &&
               r.startedAt === record.startedAt &&
               r.score === record.score;
       });
-
       if (idx !== -1) {
         arr.splice(idx, 1);
       }
-
       if (arr.length === 0) {
         localStorage.removeItem(STORAGE_RESULTS);
       } else {
@@ -643,7 +518,6 @@
           JSON.stringify(arr)
         );
       }
-
     } catch (e) {
       console.error("Ошибка удаления локального результата:", e);
     }
@@ -661,11 +535,9 @@
 
   function removePendingResult(id) {
     var pending = getPendingResults();
-
     pending = pending.filter(function(item) {
       return item.id !== id;
     });
-
     if (pending.length === 0) {
       localStorage.removeItem(STORAGE_PENDING);
     } else {
@@ -677,47 +549,32 @@
   }
 
   function syncPendingResults() {
-    if (!window.db || !navigator.onLine) {
+    if (!navigator.onLine || !window.firestoreApi) {
       return;
     }
-
-    window.firestoreReady.then(function() {
-
-      var pending = getPendingResults();
-
-      pending.forEach(function(item) {
-
-        window.db
-          .collection("results")
-          .doc(item.id)
-          .set(Object.assign({}, item.payload, {
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-          }))
-          .then(function() {
-
-            console.log(
-              "Результат успешно отправлен:",
-              item.id
-            );
-
-            // Удаляем из очереди только после подтверждения сервера
-            removePendingResult(item.id);
-
-            // Удаляем локальную копию результата
-            removeFromLocalResults(item.record);
-
-          })
-          .catch(function(error) {
-
-            console.warn(
-              "Не удалось отправить результат:",
-              error
-            );
-
-          });
-
-      });
-
+    var api = window.firestoreApi;
+    var pending = getPendingResults();
+    pending.forEach(function(item) {
+      var resultRef = api.doc(api.db, "results", item.id);
+      api.setDoc(resultRef, Object.assign({}, item.payload, {
+        timestamp: api.serverTimestamp()
+      }))
+        .then(function() {
+          console.log(
+            "Результат успешно отправлен:",
+            item.id
+          );
+          // Удаляем из очереди только после подтверждения сервера
+          removePendingResult(item.id);
+          // Удаляем локальную копию результата
+          removeFromLocalResults(item.record);
+        })
+        .catch(function(error) {
+          console.warn(
+            "Не удалось отправить результат:",
+            error
+          );
+        });
     });
   }
 
@@ -730,7 +587,6 @@
   function saveResult(rec) {
     var arr = loadResults();
     arr.push(rec);
-
     try {
       localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr));
       return true;
@@ -739,23 +595,15 @@
       return false;
     }
   }
-  // function saveResult(rec) {
-  //   var arr = loadResults();
-  //   arr.push(rec);
-  //   try { localStorage.setItem(STORAGE_RESULTS, JSON.stringify(arr)); } catch (e) {}
-  // }
 
   function showResult(rec) {
     showScreen("screen-result");
-
     var verdict = rec.passed
       ? '<div class="verdict ok-text">Удовлетворительно</div>'
       : '<div class="verdict bad-text">Неудовлетворительно</div>';
-
     // Класс для шкалы и подписи
     var scaleClass = rec.passed ? "good" : "bad";
     var scaleLabel = rec.passed ? "удовлетворительно" : "неудовлетворительно";
-
     var html =
       // --- Шкала результата ---
       '<div class="score-scale">' +
@@ -768,7 +616,6 @@
           rec.percent + '% — ' + scaleLabel +
         '</div>' +
       '</div>' +
-
       // --- Блок с цифрами ---
       '<div class="result-grid">' +
         '<div><div class="muted">Правильных ответов</div>' +
@@ -777,7 +624,6 @@
           '<div class="result-big">' + rec.percent + "%</div></div>" +
         "<div>" + verdict + "</div>" +
       "</div>" +
-
       // --- Информация о тесте ---
       '<div class="muted_inf" style="margin-top:12px">' +
         "ФИО: " + escapeHtml(rec.fio) + "<br>" +
@@ -791,7 +637,6 @@
             "Неудовлетворительно, если менее 80%" +
           "</div>" +
       "</div>";
-
     // --- Разбор ответов ---
     html += '<details style="margin-top:16px"><summary style="cursor:pointer; border-bottom: ridge; color: #666;">Показать мои ответы</summary>';
     rec.details.forEach(function (d) {
@@ -805,7 +650,6 @@
       html += "</div>";
     });
     html += "</details>";
-
     $("result-body").innerHTML = html;
   }
 
@@ -845,20 +689,16 @@
         '<div class="wrap"><div class="card bad-text">Не найден файл test.js.</div></div>';
       return;
     }
-
     initRegScreen();
-
     // Безопасное навешивание обработчика: если элемента нет — не падаем
     function bind(id, handler) {
       var el = $(id);
       if (el) el.onclick = handler;
     }
-
     bind("btn-start", startTest);
     bind("btn-prev", goPrev);
     bind("btn-next", goNext);
     bind("btn-finish", function () { finishTest(false); });
-
     bind("btn-again", function () {
       try { localStorage.removeItem(STORAGE_SESSION); } catch (e) {}
       location.reload();
@@ -868,7 +708,6 @@
       showScreen("screen-result");
     });
     bind("btn-export", exportCsv);
-
     // Восстановление сессии — выполняется в любом случае,
     // даже если каких-то кнопок нет на странице
     if (loadSession()) {
@@ -883,7 +722,6 @@
 
   window.addEventListener("online", function() {
     console.log("Интернет восстановлен. Отправляем результаты...");
-
     syncPendingResults();
   });
 

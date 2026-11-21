@@ -79,7 +79,7 @@
         Войти
       </button>
     </form>
-    <p id="login-error" style="color:#c62828; margin-top:15px;"></p>
+    <p id="login-error" style="color:#c62828; margin-top:15px; font-weight: 600;"></p>
   </div>
   <!-- Основное содержимое страницы результатов -->
   <div id="results-content" style="display:none;">
@@ -120,12 +120,9 @@
   </div>
 </main>
 
-<script src="firebase-sdk/firebase-app-compat.js"></script>
-<script src="firebase-sdk/firebase-firestore-compat.js"></script>
-<script src="firebase-sdk/firebase-auth-compat.js"></script>
-<script src="firebase.js"></script>
+<script type="module" src="firebase.js"></script>
 
-<script>
+<script type="module">
 (function () {
   "use strict";
 
@@ -153,7 +150,6 @@
     if (!m) return new Date(0);
     return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]);
   }
-
 
   function checkLocalServer() {
     var controller = new AbortController();
@@ -200,38 +196,29 @@
 
   function load() {
     document.getElementById("loading").textContent = "Проверка сервера...";
-
     checkLocalServer().then(function (localAvailable) {
-
         if (localAvailable) {
             // Локальный режим — Firebase авторизация не нужна
             dataSource = "local";
-
             document.getElementById("login-panel").style.display = "none";
             document.getElementById("results-content").style.display = "block";
             document.getElementById("btn-logout").style.display = "none";
-
             loadFromLocalApi();
-
         } else {
             // Онлайн-режим — требуется авторизация администратора
             dataSource = "firestore";
-
             if (!window.auth) {
                 document.getElementById("loading").textContent =
                     "Firebase Authentication не инициализирован.";
                 return;
             }
-
-            window.auth.onAuthStateChanged(function (user) {
-
+            window.firebaseAuthApi.onAuthStateChanged(
+              window.auth,
+              function (user) {
                 if (user && user.email === ADMIN_EMAIL) {
                     showResults();
-
                     document.getElementById("btn-logout").style.display = "inline-block";
-
                     loadFromFirestore();
-
                 } else {
                     showLogin(
                         user
@@ -239,18 +226,14 @@
                             : ""
                     );
                 }
-
             });
         }
-
     });
   }
-
 
   function loadFromLocalApi() {
     document.getElementById("loading").textContent =
       "Загрузка локальных результатов...";
-
     fetch("/api/results", {
       method: "GET",
       cache: "no-store"
@@ -259,7 +242,6 @@
         if (!response.ok) {
           throw new Error("HTTP " + response.status);
         }
-
         return response.json();
       })
       .then(function (rows) {
@@ -281,16 +263,13 @@
 
         fillTestFilter();
         render();
-
         document.getElementById("loading").textContent =
           "Режим: локальный сервер";
       })
       .catch(function (error) {
         console.error("Ошибка загрузки локальных результатов:", error);
-
         document.getElementById("loading").textContent =
           "Не удалось загрузить результаты из локальных CSV-файлов.";
-
         allRows = [];
         fillTestFilter();
         render();
@@ -300,40 +279,34 @@
   function loadFromFirestore() {
     document.getElementById("loading").textContent =
       "Загрузка результатов из Firestore...";
-
-    var firestore = window.db;
-
-    if (!firestore) {
-      document.getElementById("loading").textContent =
-        "Firestore не инициализирован.";
-
-      return;
-    }
-
-    var ready = window.firestoreReady || Promise.resolve();
-
-    ready
+    window.firestoreReady
       .then(function () {
-        return firestore.collection("results")
-          .orderBy("timestamp", "desc")
-          .get();
+        var api = window.firestoreApi;
+        if (!api) {
+          throw new Error("Firestore не инициализирован.");
+        }
+        // Получаем результаты и сортируем по дате
+        var resultsQuery = api.query(
+          api.collection(api.db, "results"),
+          api.orderBy("timestamp", "desc")
+        );
+        return api.getDocs(resultsQuery);
       })
       .then(function (querySnapshot) {
         var rows = [];
-
-        querySnapshot.forEach(function (doc) {
-          var data = doc.data();
+        querySnapshot.forEach(function (document) {
+          var data = document.data();
           var dateStr = "";
-
-          if (data.timestamp &&
-              typeof data.timestamp.toDate === "function") {
+          if (
+            data.timestamp &&
+            typeof data.timestamp.toDate === "function"
+          ) {
             dateStr = data.timestamp.toDate().toLocaleString("ru-RU");
           } else if (data.finishedAt) {
             dateStr = new Date(data.finishedAt).toLocaleString("ru-RU");
           }
-
           rows.push({
-            id: doc.id,
+            id: document.id,
             date: dateStr,
             test: data.testName || "",
             fio: data.fio || "",
@@ -345,25 +318,22 @@
             spentSec: Number(data.spentSec) || 0
           });
         });
-
         allRows = rows;
         fillTestFilter();
         render();
-
         document.getElementById("loading").textContent =
           "Режим: Firestore";
       })
       .catch(function (error) {
         console.error("Ошибка загрузки Firestore:", error);
-
         document.getElementById("loading").textContent =
           "Не удалось загрузить результаты из Firestore.";
-
         allRows = [];
         fillTestFilter();
         render();
       });
   }
+
 
   function fillTestFilter() {
     var sel = document.getElementById("filter-test");
@@ -417,7 +387,6 @@
 
     document.getElementById("summary").textContent =
       "Показано: " + rows.length + " из " + allRows.length;
-
     if (rows.length === 0) {
       document.getElementById("empty-msg").style.display = "block";
       return;
@@ -450,25 +419,19 @@
     var result = allRows.find(function (r) {
         return r.id === id;
     });
-
     if (!result) {
         alert("Результат не найден.");
         return;
     }
-
     var confirmed = confirm(
         "Удалить результат?\n\n" +
         "ФИО: " + result.fio + "\n" +
         "Тест: " + result.test + "\n" +
         "Баллы: " + result.score + " / " + result.total
     );
-
     if (!confirmed) return;
-
     document.getElementById("loading").textContent = "Удаление...";
-
     var deletePromise;
-
     if (dataSource === "local") {
         // Удаление записи из локального CSV
         deletePromise = fetch(
@@ -480,17 +443,18 @@
             if (!response.ok) {
                 throw new Error("Ошибка HTTP: " + response.status);
             }
-
             return response.json();
         });
-
     } else if (dataSource === "firestore") {
-        // Удаление документа из Firestore
-        deletePromise = window.db
-            .collection("results")
-            .doc(id)
-            .delete();
-
+      // Удаление документа из Firestore
+      deletePromise = window.firestoreReady.then(function () {
+          var api = window.firestoreApi;
+          if (!api) {
+              throw new Error("Firestore не инициализирован.");
+          }
+          var resultRef = api.doc(api.db, "results", id);
+          return api.deleteDoc(resultRef);
+      });
     } else {
         alert("Не удалось определить источник данных.");
         return;
@@ -502,21 +466,16 @@
             allRows = allRows.filter(function (r) {
                 return r.id !== id;
             });
-
             fillTestFilter();
             render();
-
             document.getElementById("loading").textContent =
                 "Результат успешно удалён.";
-
             console.log("Результат удалён:", id);
         })
         .catch(function (error) {
             console.error("Ошибка удаления результата:", error);
-
             document.getElementById("loading").textContent =
                 "Не удалось удалить результат.";
-
             alert(
                 "Ошибка удаления результата. " +
                 "Проверь подключение и доступность сервера."
@@ -530,18 +489,12 @@
         "Ты действительно хочешь удалить ВСЕ результаты тестирования?\n\n" +
         "Это действие нельзя отменить."
     );
-
     if (!confirmed) return;
-
     var button = document.getElementById("btn-delete-all");
-
     button.disabled = true;
-
     document.getElementById("loading").textContent =
         "Удаление всех результатов...";
-
     var deletePromise;
-
     if (dataSource === "local") {
         // Удаление всех локальных CSV-файлов
         deletePromise = fetch("/api/results", {
@@ -550,70 +503,64 @@
             if (!response.ok) {
                 throw new Error("Ошибка HTTP: " + response.status);
             }
-
             return response.json();
         });
-
     } else if (dataSource === "firestore") {
         // Удаление всех документов Firestore
-        deletePromise = window.db
-            .collection("results")
-            .get()
+        deletePromise = window.firestoreReady
+            .then(function () {
+                var api = window.firestoreApi;
+                if (!api) {
+                    throw new Error("Firestore не инициализирован.");
+                }
+                return api.getDocs(
+                    api.collection(api.db, "results")
+                );
+            })
             .then(function (snapshot) {
                 if (snapshot.empty) {
                     return { deleted: 0 };
                 }
-
                 var docs = snapshot.docs;
                 var deletePromise = Promise.resolve();
-
                 // Firestore позволяет удалить до 500 документов за batch
                 for (var i = 0; i < docs.length; i += 500) {
                     (function (batchDocs) {
                         deletePromise = deletePromise.then(function () {
-                            var batch = window.db.batch();
-
-                            batchDocs.forEach(function (doc) {
-                                batch.delete(doc.ref);
+                            var batch = window.firestoreApi.writeBatch(
+                                window.firestoreApi.db
+                            );
+                            batchDocs.forEach(function (document) {
+                                batch.delete(document.ref);
                             });
-
                             return batch.commit();
                         });
                     })(docs.slice(i, i + 500));
                 }
-
                 return deletePromise.then(function () {
                     return { deleted: docs.length };
                 });
             });
-
     } else {
         button.disabled = false;
-
         document.getElementById("loading").textContent =
             "Не удалось определить источник данных.";
-
         return;
     }
 
     deletePromise
         .then(function (result) {
             allRows = [];
-
             fillTestFilter();
             render();
-
             document.getElementById("loading").textContent =
                 "Все результаты успешно удалены.";
-
             console.log("Удаление завершено:", result);
         })
         .catch(function (error) {
             console.error("Ошибка удаления результатов:", error);
-
             document.getElementById("loading").textContent =
                 "Не удалось удалить все результаты.";
-
             alert(
                 "Произошла ошибка при удалении результатов. " +
                 "Проверь подключение и права доступа."
@@ -627,7 +574,6 @@
   function downloadCSV() {
       // Получаем отфильтрованные и отсортированные результаты
       var rows = getSorted(getFiltered());
-
       if (rows.length === 0) {
           alert("Нет результатов для скачивания.");
           return;
@@ -644,22 +590,17 @@
           "Оценка",
           "Время"
       ];
-
       // Защита значений для CSV
       function escapeCSV(value) {
           var text = String(value == null ? "" : value);
-
           // Защита от формул при открытии CSV в Excel
           if (/^[\s]*[=+\-@]/.test(text)) {
               text = "'" + text;
           }
-
           // Экранируем кавычки
           return '"' + text.replace(/"/g, '""') + '"';
       }
-
       var csvRows = [headers.map(escapeCSV).join(";")];
-
       rows.forEach(function (r) {
           var row = [
               r.date,
@@ -672,40 +613,29 @@
               r.verdict,
               fmtDuration(r.spentSec)
           ];
-
           csvRows.push(row.map(escapeCSV).join(";"));
       });
-
       // BOM помогает Excel правильно распознавать UTF-8
       var csvContent = "\uFEFF" + csvRows.join("\r\n");
-
       var blob = new Blob([csvContent], {
           type: "text/csv;charset=utf-8;"
       });
-
       var url = URL.createObjectURL(blob);
       var link = document.createElement("a");
-
       link.href = url;
       link.download = "results_" +
           new Date().toISOString().slice(0, 10) + ".csv";
-
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
       URL.revokeObjectURL(url);
   }
 
   document.getElementById("results-tbody")
     .addEventListener("click", function (event) {
-
         var button = event.target.closest(".delete-result-btn");
-
         if (!button) return;
-
         var id = button.getAttribute("data-id");
-
         deleteResult(id);
     });
 
@@ -722,41 +652,30 @@
   // Авторизация администратора
   document.getElementById("login-form").addEventListener("submit", function (event) {
     event.preventDefault();
-
     var email = document.getElementById("login-email").value.trim();
     var password = document.getElementById("login-password").value;
-
     var errorNode = document.getElementById("login-error");
     var submitButton = this.querySelector('button[type="submit"]');
-
     errorNode.textContent = "";
     submitButton.disabled = true;
     submitButton.textContent = "Вход...";
-
-    window.auth.signInWithEmailAndPassword(email, password)
+    window.firebaseAuthApi.signInWithEmailAndPassword(window.auth, email, password)
         .then(function (credential) {
-
             if (credential.user.email !== ADMIN_EMAIL) {
                 return window.auth.signOut().then(function () {
                     throw new Error("У этой учётной записи нет прав администратора.");
                 });
             }
-
         })
         .catch(function (error) {
-
             console.error("Ошибка авторизации:", error);
-
             if (error.code === "auth/invalid-credential" ||
                 error.code === "auth/wrong-password" ||
                 error.code === "auth/user-not-found") {
-
                 errorNode.textContent = "Неверная электронная почта или пароль.";
-
             } else {
                 errorNode.textContent = error.message;
             }
-
         })
         .finally(function () {
             submitButton.disabled = false;
@@ -766,7 +685,7 @@
 
   // Выход администратора
   document.getElementById("btn-logout").addEventListener("click", function () {
-    window.auth.signOut()
+    window.firebaseAuthApi.signOut(window.auth)
         .then(function () {
             allRows = [];
             fillTestFilter();
