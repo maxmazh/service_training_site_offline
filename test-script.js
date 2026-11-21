@@ -318,7 +318,7 @@
       });
       if (unanswered.length > 0) {
         $("test-error").textContent =
-          "Есть вопросы без ответа (" + unanswered.length + "). Пройдите по ним через «Назад» или «Далее».";
+          "Выберите вариант ответа, чтобы завершить тест.";
         // Разблокируем, раз завершение не состоялось
         state.isFinishing = false;
         if (btnFinish) { btnFinish.disabled = false; btnFinish.textContent = "Завершить тест"; }

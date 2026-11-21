@@ -13,12 +13,16 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 
-// const app = initializeApp(firebaseConfig);
 const db = firebase.firestore();
-
 window.db = db;
 
+// Authentication
+if (typeof firebase.auth === "function") {
+    const auth = firebase.auth();
+    window.auth = auth;
+}
 
+// Firestore Offline Persistence
 window.firestoreReady = db.enablePersistence({
   synchronizeTabs: true
 })

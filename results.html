@@ -50,6 +50,40 @@
 </head>
 <body>
 <main class="results-main">
+
+    <!-- Форма авторизации администратора -->
+  <div id="login-panel" style="display:none; max-width:400px; margin:40px auto; padding:25px; background:#fff; border-radius:8px; box-shadow:0 1px 5px rgba(0,0,0,.1);">
+    <h2 style="margin-bottom:20px;">Вход администратора</h2>
+    <form id="login-form">
+      <input
+        type="email"
+        id="login-email"
+        placeholder="Электронная почта"
+        value="maxmazh48@gmail.com"
+        autocomplete="username"
+        required
+        style="display:block; width:100%; padding:12px; margin-bottom:12px; box-sizing:border-box;"
+      >
+      <input
+        type="password"
+        id="login-password"
+        placeholder="Пароль"
+        autocomplete="current-password"
+        required
+        style="display:block; width:100%; padding:12px; margin-bottom:15px; box-sizing:border-box;"
+      >
+      <button
+        type="submit"
+        style="width:100%; padding:12px; background:#2c7be5; color:#fff; font-weight: 600; border:0; border-radius:6px; cursor:pointer;"
+      >
+        Войти
+      </button>
+    </form>
+    <p id="login-error" style="color:#c62828; margin-top:15px;"></p>
+  </div>
+  <!-- Основное содержимое страницы результатов -->
+  <div id="results-content" style="display:none;">
+
   <h1>Результаты тестирования</h1>
   <div class="results-toolbar">
     <input type="text" id="filter-text" placeholder="Поиск по ФИО или органу...">
@@ -60,6 +94,7 @@
     <button id="btn-delete-all" class="danger">Удалить все результаты</button>
     <button id="btn-download">Скачать CSV</button>
     <a id="btn-home" class="btn-home" href="index.html">На главную</a>
+    <button id="btn-logout" class="secondary" style="display:none;">Выйти</button>
     <span id="loading" class="muted"></span>
   </div>
   <div class="results-summary" id="summary"></div>
@@ -82,10 +117,12 @@
     </table>
     <div class="empty" id="empty-msg" style="display:none">Нет результатов.</div>
   </div>
+  </div>
 </main>
 
 <script src="firebase-sdk/firebase-app-compat.js"></script>
 <script src="firebase-sdk/firebase-firestore-compat.js"></script>
+<script src="firebase-sdk/firebase-auth-compat.js"></script>
 <script src="firebase.js"></script>
 
 <script>
@@ -96,6 +133,7 @@
   var sortKey = "date";
   var sortAsc = false;
   var dataSource = null;
+  var ADMIN_EMAIL = "maxmazh48@gmail.com";
 
   function fmtDuration(sec) {
     sec = Math.max(0, Math.floor(sec));
@@ -145,21 +183,69 @@
       });
   }
 
+  function showLogin(message) {
+      document.getElementById("login-panel").style.display = "block";
+      document.getElementById("results-content").style.display = "none";
+
+      document.getElementById("btn-logout").style.display = "none";
+
+      document.getElementById("login-error").textContent = message || "";
+      document.getElementById("loading").textContent = "";
+  }
+
+  function showResults() {
+      document.getElementById("login-panel").style.display = "none";
+      document.getElementById("results-content").style.display = "block";
+  }
+
   function load() {
     document.getElementById("loading").textContent = "Проверка сервера...";
 
     checkLocalServer().then(function (localAvailable) {
-      if (localAvailable) {
-        // Локальный сервер доступен — используем CSV
-        dataSource = "local";
-        loadFromLocalApi();
-      } else {
-        // Локального сервера нет — используем Firestore
-        dataSource = "firestore";
-        loadFromFirestore();
-      }
+
+        if (localAvailable) {
+            // Локальный режим — Firebase авторизация не нужна
+            dataSource = "local";
+
+            document.getElementById("login-panel").style.display = "none";
+            document.getElementById("results-content").style.display = "block";
+            document.getElementById("btn-logout").style.display = "none";
+
+            loadFromLocalApi();
+
+        } else {
+            // Онлайн-режим — требуется авторизация администратора
+            dataSource = "firestore";
+
+            if (!window.auth) {
+                document.getElementById("loading").textContent =
+                    "Firebase Authentication не инициализирован.";
+                return;
+            }
+
+            window.auth.onAuthStateChanged(function (user) {
+
+                if (user && user.email === ADMIN_EMAIL) {
+                    showResults();
+
+                    document.getElementById("btn-logout").style.display = "inline-block";
+
+                    loadFromFirestore();
+
+                } else {
+                    showLogin(
+                        user
+                            ? "У этой учётной записи нет прав администратора."
+                            : ""
+                    );
+                }
+
+            });
+        }
+
     });
   }
+
 
   function loadFromLocalApi() {
     document.getElementById("loading").textContent =
@@ -278,27 +364,6 @@
         render();
       });
   }
-
-  //           // Резервный вариант: читаем с локального сервера
-  //           fetch("/api/results")
-  //               .then(function(r) { return r.json(); })
-  //               .then(function(rows) { allRows = rows; render(); })
-  //               .catch(function(e) { console.error("Локальный API тоже недоступен:", e); });
-  //       });
-  // }
-
-  //   fetch("/api/results")
-  //     .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-  //     .then(function (rows) {
-  //       allRows = rows;
-  //       fillTestFilter();
-  //       render();
-  //       document.getElementById("loading").textContent = "";
-  //     })
-  //     .catch(function (e) {
-  //       document.getElementById("loading").textContent = "Ошибка загрузки: " + e.message;
-  //     });
-  // }
 
   function fillTestFilter() {
     var sel = document.getElementById("filter-test");
@@ -654,10 +719,79 @@
     });
   });
 
+  // Авторизация администратора
+  document.getElementById("login-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    var email = document.getElementById("login-email").value.trim();
+    var password = document.getElementById("login-password").value;
+
+    var errorNode = document.getElementById("login-error");
+    var submitButton = this.querySelector('button[type="submit"]');
+
+    errorNode.textContent = "";
+    submitButton.disabled = true;
+    submitButton.textContent = "Вход...";
+
+    window.auth.signInWithEmailAndPassword(email, password)
+        .then(function (credential) {
+
+            if (credential.user.email !== ADMIN_EMAIL) {
+                return window.auth.signOut().then(function () {
+                    throw new Error("У этой учётной записи нет прав администратора.");
+                });
+            }
+
+        })
+        .catch(function (error) {
+
+            console.error("Ошибка авторизации:", error);
+
+            if (error.code === "auth/invalid-credential" ||
+                error.code === "auth/wrong-password" ||
+                error.code === "auth/user-not-found") {
+
+                errorNode.textContent = "Неверная электронная почта или пароль.";
+
+            } else {
+                errorNode.textContent = error.message;
+            }
+
+        })
+        .finally(function () {
+            submitButton.disabled = false;
+            submitButton.textContent = "Войти";
+        });
+  });
+
+  // Выход администратора
+  document.getElementById("btn-logout").addEventListener("click", function () {
+    window.auth.signOut()
+        .then(function () {
+            allRows = [];
+            fillTestFilter();
+            render();
+        })
+        .catch(function (error) {
+            console.error("Ошибка выхода:", error);
+            alert("Не удалось выйти из учётной записи.");
+        });
+  });
+
   document.getElementById("btn-delete-all").addEventListener("click", deleteAllResults);
   document.getElementById("filter-text").addEventListener("input", render);
   document.getElementById("filter-test").addEventListener("change", render);
-  document.getElementById("btn-refresh").addEventListener("click", load);
+  document.getElementById("btn-refresh").addEventListener("click", function () {
+    // Сбрасываем фильтры
+    document.getElementById("filter-text").value = "";
+    document.getElementById("filter-test").value = "";
+    // Обновляем данные в зависимости от режима
+    if (dataSource === "local") {
+        loadFromLocalApi();
+    } else if (dataSource === "firestore" && window.auth.currentUser) {
+        loadFromFirestore();
+    }
+  });
   document.getElementById("btn-download").addEventListener("click", downloadCSV)
 
   load();
