@@ -403,6 +403,26 @@
       });
   }
 
+  function getPublicIp() {
+    return fetch("https://api.ipify.org?format=json", {
+      cache: "no-store"
+    })
+      .then(function(response) {
+        if (!response.ok) {
+          throw new Error("Не удалось получить IP-адрес");
+        }
+
+        return response.json();
+      })
+      .then(function(data) {
+        return data.ip || "";
+      })
+      .catch(function(error) {
+        console.warn("Не удалось определить публичный IP:", error);
+        return "";
+      });
+  }
+
   // Определяем, куда сохранять результат
   function saveCompletedResult(payload, record) {
     checkLocalServer().then(function (localAvailable) {
@@ -555,14 +575,20 @@
     var api = window.firestoreApi;
     var pending = getPendingResults();
     pending.forEach(function(item) {
+      function saveToFirestore(ip) {
+        var payload = Object.assign({}, item.payload, {
+          ipAddress: ip || ""
+        });
       var resultRef = api.doc(api.db, "results", item.id);
-      api.setDoc(resultRef, Object.assign({}, item.payload, {
+      api.setDoc(resultRef, Object.assign({}, payload, {
         timestamp: api.serverTimestamp()
       }))
         .then(function() {
           console.log(
             "Результат успешно отправлен:",
-            item.id
+            item.id,
+            "IP:",
+            ip || "не определён"
           );
           // Удаляем из очереди только после подтверждения сервера
           removePendingResult(item.id);
@@ -575,6 +601,16 @@
             error
           );
         });
+    }
+      // Если IP уже есть, используем его.
+      if (item.payload.ipAddress) {
+        saveToFirestore(item.payload.ipAddress);
+      } else {
+        // Если IP ещё нет, пробуем получить его.
+        getPublicIp().then(function(ip) {
+          saveToFirestore(ip);
+        });
+      }
     });
   }
 

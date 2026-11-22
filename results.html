@@ -315,7 +315,8 @@
             total: Number(data.total) || 0,
             percent: Number(data.percent) || 0,
             verdict: data.passed ? "Уд" : "Неуд",
-            spentSec: Number(data.spentSec) || 0
+            spentSec: Number(data.spentSec) || 0,
+            ipAddress: data.ipAddress || ""
           });
         });
         allRows = rows;
@@ -333,7 +334,6 @@
         render();
       });
   }
-
 
   function fillTestFilter() {
     var sel = document.getElementById("filter-test");
@@ -588,7 +588,8 @@
           "Всего баллов",
           "Процент",
           "Оценка",
-          "Время"
+          "Время",
+          "IP-адрес"
       ];
       // Защита значений для CSV
       function escapeCSV(value) {
@@ -611,7 +612,8 @@
               r.total,
               r.percent + "%",
               r.verdict,
-              fmtDuration(r.spentSec)
+              fmtDuration(r.spentSec),
+              r.ipAddress || ""
           ];
           csvRows.push(row.map(escapeCSV).join(";"));
       });
