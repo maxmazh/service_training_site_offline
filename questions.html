@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <title>Управление вопросами</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="stylesheet" href="reset.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        [hidden] { display: none !important; }
+        main { padding: 35px 25px; max-width: 1500px; margin: 0 auto; font-weight: 600;}
+        h1 { margin-bottom: 25px; }
+        button, a { font-weight: 600; }
+        .panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px; }
+        #login-panel { max-width: 420px; margin: 50px auto; }
+        #login-panel input { display: block; width: 100%; margin: 12px 0; padding: 12px; box-sizing: border-box; }
+        .admin-layout { display: grid; grid-template-columns: 240px minmax(280px, 1fr) minmax(300px, 1fr);
+            gap: 16px; align-items: start; }
+        .panel h2 { font-size: 18px; margin: 0 0 15px; }
+        .item-button {
+            display: block; width: 100%; text-align: left; padding: 10px; margin-bottom: 7px; border: 1px solid #ddd;
+            border-radius: 5px; background: #fff; color: #222; cursor: pointer; font-size: 14px;
+        }
+        .item-button:hover { background: #f2f5f8; }
+        .group-actions { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+        .group-actions button { width: 100%; padding: 9px; cursor: pointer; }
+        .group-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+        .group-editor { padding: 12px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; background: #f8f9fa; }
+        .group-editor h3 { font-size: 16px; margin: 0 0 12px; }
+        .group-editor label { display: block; margin: 10px 0 5px; font-size: 13px; }
+        .group-editor input { width: 100%; padding: 9px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; }
+        .item-button.selected { background: #e8f1fb; border-color: #6b9acb; }
+        .muted { color: #777; font-size: 13px; }
+        .question-item { margin-bottom: 8px; }
+        .question-item button { line-height: 1.4; }
+        .answer { padding: 9px 12px; margin: 7px 0; background: #f5f5f5; border-radius: 5px; font-size: 14px; }
+        .answer.correct { background: #e7f5e9; border-left: 3px solid #31964b; }
+        .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        #status { margin: 12px 0; color: #555; font-size: 14px; }
+        .error { color: #c62828 !important; }
+        .success { color: #27823b !important; }
+        .question-editor textarea {
+            width: 100%; min-height: 100px; padding: 10px; box-sizing: border-box; resize: vertical;
+            font: inherit; border: 1px solid #ccc; border-radius: 5px;
+        }
+        .answer-editor { display: grid; grid-template-columns: 24px minmax(0, 1fr) 32px;
+            gap: 8px; align-items: center; margin: 10px 0;
+        }
+        .answer-editor input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px; }
+        .answer-editor input[type="radio"] { width: 18px; height: 18px; }
+        .answer-editor button { padding: 7px; background: #fbeaea; color: #b3261e; }
+        .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+        .editor-note { margin-top: 12px; font-size: 12px; color: #777; }
+        @media (max-width: 950px) { .admin-layout {
+                grid-template-columns: 1fr 1fr; }
+            .details-panel { grid-column: 1 / -1; }}
+        @media (max-width: 600px) { main {
+                padding: 20px 12px; }
+            .admin-layout { grid-template-columns: 1fr; }
+            .details-panel { grid-column: auto; }}
+    </style>
+</head>
+<body>
+<main>
+    <h1>Управление вопросами</h1>
+    <!-- Авторизация -->
+    <section id="login-panel" class="panel">
+        <h2>Вход администратора</h2>
+        <p class="muted">
+            Для управления вопросами необходимо войти
+            под учётной записью администратора.
+        </p>
+        <form id="login-form">
+            <input type="email" id="login-email" placeholder="Электронная почта" autocomplete="username" required>
+            <input type="password" id="login-password" placeholder="Пароль" autocomplete="current-password" required>
+            <button type="submit">Войти</button>
+        </form>
+        <p id="login-message"></p>
+    </section>
+    <!-- Административная часть -->
+    <section id="admin-app" hidden>
+        <div class="toolbar">
+            <div>
+                <span id="admin-email" class="muted"></span>
+                <p id="status">Загрузка данных...</p>
+            </div>
+            <button id="btn-logout" class="secondary">Выйти</button>
+        </div>
+        <div class="admin-layout">
+            <!-- Тесты и группы -->
+            <section class="panel">
+                <h2>Тесты</h2>
+                <div id="tests-list">Загрузка...</div>
+                <hr style="margin: 18px 0;">
+                <h2>Группы вопросов</h2>
+                <div class="group-actions">
+                    <button id="btn-add-group" type="button">+ Добавить группу</button>
+                    <button id="btn-edit-group" type="button" disabled>Изменить группу</button>
+                    <button id="btn-delete-group" type="button" disabled class="danger">Удалить группу</button>
+                </div>
+                <div id="group-editor" class="group-editor" hidden>
+                    <h3 id="group-editor-title">Новая группа</h3>
+                    <label for="group-name">Название группы</label>
+                    <input type="text" id="group-name" maxlength="200" placeholder="Введите название группы" >
+                    <label for="group-questions-count">Вопросов в одном билете</label>
+                    <input type="number" id="group-questions-count" min="1" step="1" value="3" >
+                    <div class="editor-actions">
+                        <button type="button" id="btn-save-group">Сохранить</button>
+                        <button type="button" id="btn-cancel-group" class="secondary">Отмена</button>
+                    </div>
+                </div>
+                <div id="groups-list">
+                    <p class="muted">Выберите тест</p>
+                </div>
+            </section>
+            <!-- Список вопросов -->
+            <section class="panel">
+                <h2>Вопросы</h2>
+                <input type="search" id="question-search" placeholder="Поиск по тексту вопроса..."
+                    style="width:100%; padding:10px; box-sizing:border-box; margin-bottom:10px;"
+                >
+                <button id="btn-add-question" style="width:100%; margin-bottom:12px;">+ Добавить вопрос</button>
+                <div id="questions-list">
+                    <p class="muted">Выберите группу</p>
+                </div>
+            </section>
+            <!-- Просмотр вопроса -->
+            <section class="panel details-panel">
+                <h2>Редактор вопроса</h2>
+                <div id="question-details">
+                    <p class="muted">Выберите вопрос из списка</p>
+                </div>
+            </section>
+        </div>
+    </section>
+</main>
+<script type="module" src="firebase.js"></script>
+<script type="module" src="supabase.js"></script>
+
+<script type="module">
+    const ADMIN_EMAIL = "maxmazh48@gmail.com";
+
+    const loginPanel = document.getElementById("login-panel");
+    const adminApp = document.getElementById("admin-app");
+    const loginForm = document.getElementById("login-form");
+    const loginMessage = document.getElementById("login-message");
+    const status = document.getElementById("status");
+
+    const testsList = document.getElementById("tests-list");
+    const groupsList = document.getElementById("groups-list");
+    const questionsList = document.getElementById("questions-list");
+    const questionDetails = document.getElementById("question-details");
+
+    const btnAddGroup = document.getElementById("btn-add-group");
+    const btnEditGroup = document.getElementById("btn-edit-group");
+    const btnDeleteGroup = document.getElementById("btn-delete-group");
+
+    const groupEditor = document.getElementById("group-editor");
+    const groupEditorTitle = document.getElementById("group-editor-title");
+    const groupNameInput = document.getElementById("group-name");
+    const groupQuestionsCountInput = document.getElementById("group-questions-count");
+    const btnSaveGroup = document.getElementById("btn-save-group");
+    const btnCancelGroup = document.getElementById("btn-cancel-group");
+
+    let currentTestId = null;
+    let currentGroupId = null;
+    let currentGroup = null;
+    let editingGroupId = null;
+    let currentQuestions = [];
+    let currentAnswers = [];
+    let editingQuestion = null;
+    let editingAnswers = [];
+    let editingIsNew = false;
+
+    function showLogin(message) {
+        loginPanel.hidden = false;
+        adminApp.hidden = true;
+        loginMessage.textContent = message || "";
+        loginMessage.className = message ? "error" : "";
+    }
+
+    function showAdmin(user) {
+        loginPanel.hidden = true;
+        adminApp.hidden = false;
+        document.getElementById("admin-email").textContent =
+            "Администратор: " + user.email;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, function (char) {
+            return {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#039;"
+            }[char];
+        });
+    }
+
+    function setStatus(message, isError) {
+        status.textContent = message;
+        status.className = isError ? "error" : "";
+    }
+
+    // Открытие формы создания или редактирования группы
+    function openGroupEditor(group = null) {
+        if (!currentTestId) {
+            setStatus("Сначала выберите тест.", true);
+            return;
+        }
+        editingGroupId = group ? group.id : null;
+        if (group) {
+            groupEditorTitle.textContent = "Изменение группы";
+            groupNameInput.value = group.name;
+            groupQuestionsCountInput.value = group.questions_per_ticket;
+        } else {
+            groupEditorTitle.textContent = "Новая группа";
+            groupNameInput.value = "";
+            groupQuestionsCountInput.value = 3;
+        }
+        groupEditor.hidden = false;
+        groupNameInput.focus();
+    }
+
+    // Закрытие формы
+    function closeGroupEditor() {
+        groupEditor.hidden = true;
+        groupNameInput.value = "";
+        groupQuestionsCountInput.value = 3;
+    }
+
+    // Отправка запроса на серверную Edge Function
+    async function saveQuestionToServer(questionData) {
+        const user = window.auth.currentUser;
+
+        if (!user) {
+            throw new Error("Необходимо войти в учётную запись администратора.");
+        }
+
+        // Получаем актуальный Firebase ID token
+        const token = await user.getIdToken();
+        const response = await fetch(
+            "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "save_question",
+                    question_id: questionData.id,
+                    group_id: questionData.group_id,
+                    question_text: questionData.question_text,
+                    answers: questionData.answers,
+                    sort_order: questionData.sort_order
+                })
+            }
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || "Не удалось сохранить вопрос."
+            );
+        }
+        return result;
+    }
+
+    // Удаление вопроса через серверную Edge Function
+    async function deleteQuestionFromServer(questionId) {
+        const user = window.auth.currentUser;
+        if (!user) {
+            throw new Error("Необходимо войти в учётную запись администратора.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(
+            "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "delete_question",
+                    question_id: questionId
+                })
+            }
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || "Не удалось удалить вопрос."
+            );
+        }
+        return result;
+    }
+
+    // Создание и редактирование группы через Edge Function
+    async function saveGroupToServer(groupData) {
+        const user = window.auth.currentUser;
+        if (!user) {
+            throw new Error("Необходимо войти в учётную запись администратора.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(
+            "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "save_group",
+                    test_id: groupData.test_id,
+                    group_id: groupData.group_id || null,
+                    name: groupData.name,
+                    questions_per_ticket: groupData.questions_per_ticket
+                })
+            }
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || "Не удалось сохранить группу."
+            );
+        }
+        return result;
+    }
+
+    // Удаление группы через Edge Function
+    async function deleteGroupFromServer(groupId) {
+        const user = window.auth.currentUser;
+        if (!user) {
+            throw new Error("Необходимо войти в учётную запись администратора.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(
+            "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "delete_group",
+                    group_id: groupId
+                })
+            }
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || "Не удалось удалить группу."
+            );
+        }
+        return result;
+    }
+
+    // Вход администратора
+    loginForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const email = document.getElementById("login-email").value.trim();
+        const password = document.getElementById("login-password").value;
+        try {
+            loginMessage.textContent = "Выполняется вход...";
+            loginMessage.className = "";
+            const result =
+                await window.firebaseAuthApi.signInWithEmailAndPassword(
+                    window.auth,
+                    email,
+                    password
+                );
+            if (
+                !result.user.email ||
+                result.user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
+            ) {
+                await window.firebaseAuthApi.signOut(window.auth);
+                showLogin("У этой учётной записи нет прав администратора.");
+            }
+        } catch (error) {
+            console.error("Ошибка входа:", error);
+            showLogin("Не удалось войти. Проверьте почту и пароль.");
+        }
+    });
+
+    // Выход
+    document.getElementById("btn-logout").addEventListener("click", async function () {
+        try {
+            await window.firebaseAuthApi.signOut(window.auth);
+        } catch (error) {
+            console.error("Ошибка выхода:", error);
+            setStatus("Не удалось выполнить выход.", true);
+        }
+    });
+
+    // Проверка авторизации
+    window.firebaseAuthApi.onAuthStateChanged(
+        window.auth,
+        async function (user) {
+            if (
+                user &&
+                user.email &&
+                user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+            ) {
+                showAdmin(user);
+                await loadTests();
+            } else {
+                showLogin(
+                    user
+                        ? "У этой учётной записи нет прав администратора."
+                        : ""
+                );
+            }
+        }
+    );
+
+    // Загрузка тестов
+    async function loadTests() {
+        setStatus("Загрузка тестов...", false);
+        const supabase = window.supabaseClient;
+        if (!supabase) {
+            setStatus("Supabase не подключён.", true);
+            return;
+        }
+        const { data, error } = await supabase
+            .from("tests")
+            .select("id, slug, name, is_active")
+            .order("name");
+        if (error) {
+            console.error(error);
+            setStatus("Ошибка загрузки тестов: " + error.message, true);
+            return;
+        }
+        testsList.innerHTML = "";
+        if (!data || data.length === 0) {
+            testsList.innerHTML =
+                '<p class="muted">Доступных тестов нет</p>';
+            setStatus("Тесты не найдены.", false);
+            return;
+        }
+        data.forEach(function (test) {
+            const button = document.createElement("button");
+            button.className = "item-button";
+            button.textContent = test.name;
+            button.addEventListener("click", function () {
+                selectTest(test, button);
+            });
+            testsList.appendChild(button);
+        });
+        setStatus("Тесты загружены.", false);
+        // Автоматически выбираем первый тест
+        const firstButton = testsList.querySelector("button");
+        if (firstButton) firstButton.click();
+    }
+
+    // Выбор теста и загрузка групп
+    async function selectTest(test, button) {
+        currentTestId = test.id;
+        currentGroupId = null;
+        currentGroup = null;
+        btnEditGroup.disabled = true;
+        btnDeleteGroup.disabled = true;
+        testsList.querySelectorAll("button").forEach(function (item) {
+            item.classList.remove("selected");
+        });
+        button.classList.add("selected");
+        groupsList.innerHTML = "<p class='muted'>Загрузка групп...</p>";
+        questionsList.innerHTML = "<p class='muted'>Выберите группу</p>";
+        questionDetails.innerHTML = "<p class='muted'>Выберите вопрос</p>";
+        const { data, error } = await window.supabaseClient
+            .from("question_groups")
+            .select("id, name, sort_order, questions_per_ticket")
+            .eq("test_id", test.id)
+            .order("sort_order");
+        if (error) {
+            console.error(error);
+            groupsList.textContent = "Ошибка загрузки групп: " + error.message;
+            return;
+        }
+        groupsList.innerHTML = "";
+        if (!data || data.length === 0) {
+            groupsList.innerHTML = "<p class='muted'>Групп нет</p>";
+            return;
+        }
+        data.forEach(function (group) {
+            const button = document.createElement("button");
+            button.className = "item-button";
+            button.textContent =
+                group.name + " — " + group.questions_per_ticket + " в билете";
+            button.addEventListener("click", function () {
+                selectGroup(group, button);
+            });
+            groupsList.appendChild(button);
+        });
+        const firstButton = groupsList.querySelector("button");
+        if (firstButton) firstButton.click();
+    }
+
+    // Выбор группы и загрузка вопросов
+    async function selectGroup(group, button) {
+        currentGroupId = group.id;
+        currentGroup = group;
+        btnEditGroup.disabled = false;
+        btnDeleteGroup.disabled = false;
+        groupsList.querySelectorAll("button").forEach(function (item) {
+            item.classList.remove("selected");
+        });
+        button.classList.add("selected");
+        questionsList.innerHTML = "<p class='muted'>Загрузка вопросов...</p>";
+        questionDetails.innerHTML = "<p class='muted'>Выберите вопрос</p>";
+        const { data, error } = await window.supabaseClient
+            .from("questions")
+            .select("id, question_text, sort_order, is_active")
+            .eq("group_id", group.id)
+            .order("sort_order");
+        if (error) {
+            console.error(error);
+            questionsList.textContent =
+                "Ошибка загрузки вопросов: " + error.message;
+            return;
+        }
+        currentQuestions = data || [];
+        currentAnswers = [];
+        if (currentQuestions.length === 0) {
+            questionsList.innerHTML =
+                "<p class='muted'>Вопросов в этой группе нет</p>";
+            return;
+        }
+        const questionIds = currentQuestions.map(function (question) {
+            return question.id;
+        });
+        const { data: answers, error: answersError } =
+            await window.supabaseClient
+                .from("answers")
+                .select("id, question_id, answer_text, is_correct, sort_order")
+                .in("question_id", questionIds)
+                .order("sort_order");
+        if (answersError) {
+            console.error(answersError);
+            questionsList.textContent =
+                "Ошибка загрузки ответов: " + answersError.message;
+            return;
+        }
+        currentAnswers = answers || [];
+        renderQuestions();
+        setStatus(
+            "Загружено вопросов: " + currentQuestions.length,
+            false
+        );
+    }
+
+    // Отображение списка вопросов
+    function renderQuestions() {
+        questionsList.innerHTML = "";
+        const search = document
+            .getElementById("question-search")
+            .value.trim().toLowerCase();
+        const filtered = currentQuestions.filter(function (question) {
+            return question.question_text.toLowerCase().includes(search);
+        });
+        if (filtered.length === 0) {
+            questionsList.innerHTML =
+                "<p class='muted'>Вопросы не найдены</p>";
+            return;
+        }
+        filtered.forEach(function (question, index) {
+            const answersCount = currentAnswers.filter(function (answer) {
+                return answer.question_id === question.id;
+            }).length;
+            const button = document.createElement("button");
+            button.className = "item-button";
+            button.innerHTML =
+                "<strong>" + (index + 1) + ".</strong> " +
+                escapeHtml(question.question_text) +
+                "<br><span class='muted'>Вариантов ответов: " +
+                answersCount + "</span>";
+            button.addEventListener("click", function () {
+                questionsList.querySelectorAll("button").forEach(function (item) {
+                    item.classList.remove("selected");
+                });
+                button.classList.add("selected");
+                renderQuestionDetails(question);
+            });
+            questionsList.appendChild(button);
+        });
+    }
+    // Просмотр выбранного вопроса и ответов
+    function renderQuestionDetails(question) {
+        editingQuestion = {
+            id: question.id,
+            question_text: question.question_text,
+            sort_order: question.sort_order,
+            is_active: question.is_active
+        };
+        editingAnswers = currentAnswers
+            .filter(function (answer) {
+                return answer.question_id === question.id;
+            })
+            .map(function (answer) {
+                return {
+                    id: answer.id,
+                    question_id: answer.question_id,
+                    answer_text: answer.answer_text,
+                    is_correct: answer.is_correct,
+                    sort_order: answer.sort_order
+                };
+            });
+        editingIsNew = false;
+        renderQuestionEditor();
+    }
+
+    function captureEditorDraft() {
+        const text = document.getElementById("editor-question-text");
+        if (text) {
+            editingQuestion.question_text = text.value;
+        }
+        document.querySelectorAll(".editor-answer-text").forEach(function (input) {
+            const index = Number(input.dataset.index);
+            if (editingAnswers[index]) {
+                editingAnswers[index].answer_text = input.value;
+            }
+        });
+        const selected = document.querySelector(
+            'input[name="correct-answer"]:checked'
+        );
+        if (selected) {
+            const selectedIndex = Number(selected.value);
+            editingAnswers.forEach(function (answer, index) {
+                answer.is_correct = index === selectedIndex;
+            });
+        }
+    }
+
+    function renderQuestionEditor() {
+        if (!editingQuestion) return;
+        let html =
+            '<div class="question-editor">' +
+            '<label><strong>Текст вопроса</strong></label>' +
+            '<textarea id="editor-question-text">' +
+            escapeHtml(editingQuestion.question_text) +
+            '</textarea>' +
+            '<p><strong>Варианты ответов: ' +
+            editingAnswers.length +
+            '</strong></p>';
+        editingAnswers.forEach(function (answer, index) {
+            html +=
+                '<div class="answer-editor">' +
+                '<input type="radio" name="correct-answer" value="' + index + '"' +
+                (answer.is_correct ? " checked" : "") +
+                ' title="Правильный ответ">' +
+                '<input type="text" class="editor-answer-text" data-index="' +
+                index + '" value="' + escapeHtml(answer.answer_text) + '">' +
+                '<button type="button" class="btn-remove-answer" data-index="' +
+                index + '" title="Удалить ответ">×</button>' +
+                '</div>';
+        });
+        html +=
+            '<button type="button" id="btn-add-answer" class="secondary">' +
+            '+ Добавить вариант ответа</button>' +
+            '<div class="editor-actions">' +
+            '<button type="button" id="btn-save-draft">Применить изменения</button>' +
+            '<button type="button" id="btn-delete-question" class="danger">' +
+            'Удалить вопрос</button>' +
+            '</div>' +
+            '<p class="editor-note">' +
+            'Изменения пока применяются только в текущем окне страницы. ' +
+            'Они не сохраняются в Supabase.' +
+            '</p>' +
+            '</div>';
+        questionDetails.innerHTML = html;
+        document.getElementById("btn-add-answer").addEventListener(
+            "click", function () { captureEditorDraft();
+                editingAnswers.push({ 
+                    id: "draft-answer-" + Date.now() + "-" + editingAnswers.length,
+                    question_id: editingQuestion.id,
+                    answer_text: "",
+                    is_correct: false,
+                    sort_order: editingAnswers.length
+                });
+                renderQuestionEditor();
+            }
+        );
+        document.querySelectorAll(".btn-remove-answer").forEach(function (button) {
+            button.addEventListener("click", function () {
+                if (editingAnswers.length <= 2) {
+                    alert("У вопроса должно оставаться не менее двух вариантов ответа.");
+                    return;
+                }
+                captureEditorDraft();
+                const index = Number(button.dataset.index);
+                const removed = editingAnswers.splice(index, 1)[0];
+                if (removed.is_correct && editingAnswers.length > 0) {
+                    editingAnswers[0].is_correct = true;
+                }
+                editingAnswers.forEach(function (answer, i) {
+                    answer.sort_order = i;
+                });
+                renderQuestionEditor();
+            });
+        });
+        document.querySelectorAll('input[name="correct-answer"]').forEach(
+            function (radio) {
+                radio.addEventListener("change", function () {
+                    const selectedIndex = Number(radio.value);
+                    editingAnswers.forEach(function (answer, index) {
+                        answer.is_correct = index === selectedIndex;
+                    });
+                });
+            }
+        );
+        document.getElementById("btn-save-draft").addEventListener(
+            "click",
+            saveQuestionDraft
+        );
+        document.getElementById("btn-delete-question").addEventListener(
+            "click",
+            deleteQuestionDraft
+        );
+    }
+
+    async function saveQuestionDraft() {
+        captureEditorDraft();
+        const questionText = editingQuestion.question_text.trim();
+        if (!questionText) {
+            setStatus("Введите текст вопроса.", true);
+            return;
+        }
+        if (editingAnswers.length < 2) {
+            setStatus("Необходимо минимум два варианта ответа.", true);
+            return;
+        }
+        if (editingAnswers.some(answer => !answer.answer_text.trim())) {
+            setStatus("Заполните текст всех вариантов ответа.", true);
+            return;
+        }
+        const correctCount = editingAnswers.filter(
+            answer => answer.is_correct
+        ).length;
+        if (correctCount !== 1) {
+            setStatus("Отметьте ровно один правильный ответ.", true);
+            return;
+        }
+        const saveButton = questionDetails.querySelector(
+            '[data-action="save-question"]'
+        );
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = "Сохранение...";
+        }
+        setStatus("Сохраняем вопрос в Supabase...", false);
+        try {
+            const questionData = {
+                id: editingIsNew ? null : editingQuestion.id,
+                group_id: currentGroupId,
+                question_text: questionText,
+                answers: editingAnswers.map(answer => ({
+                    answer_text: answer.answer_text.trim(),
+                    is_correct: answer.is_correct
+                })),
+                sort_order: editingIsNew ? null : editingQuestion.sort_order
+            };
+            const result = await saveQuestionToServer(questionData);
+            setStatus("Вопрос успешно сохранён в Supabase.", false);
+            const savedQuestionId = result.question_id;
+            // Перезагружаем вопросы и ответы выбранной группы из базы
+            const selectedGroupButton = groupsList.querySelector(
+                "button.selected"
+            );
+            await selectGroup(
+                { id: currentGroupId },
+                selectedGroupButton
+            );
+            // Снова открываем сохранённый вопрос в редакторе
+            const savedQuestion = currentQuestions.find(
+                question => question.id === savedQuestionId
+            );
+            if (savedQuestion) {
+                renderQuestionDetails(savedQuestion);
+            }
+            setStatus("Вопрос успешно сохранён в Supabase.", false);
+        } catch (error) {
+            console.error("Ошибка сохранения вопроса:", error);
+            setStatus(error.message || "Не удалось сохранить вопрос.", true);
+        } finally {
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.textContent = "Сохранить изменения";
+            }
+        }
+    }
+
+    async function deleteQuestionDraft() {
+        if (!editingQuestion || editingIsNew) {
+            setStatus("Сначала выберите сохранённый вопрос.", true);
+            return;
+        }
+        const questionId = editingQuestion.id;
+        if (!confirm(
+            "Вы действительно хотите удалить этот вопрос вместе со всеми вариантами ответов?\n\nЭто действие невозможно отменить."
+        )) {
+            return;
+        }
+        const deleteButton = document.getElementById("btn-delete-question");
+        if (deleteButton) {
+            deleteButton.disabled = true;
+            deleteButton.textContent = "Удаление...";
+        }
+        setStatus("Удаляем вопрос из Supabase...", false);
+        try {
+            // Отправляем запрос на сервер
+            await deleteQuestionFromServer(questionId);
+            // Убираем удалённый вопрос из локальных данных
+            currentQuestions = currentQuestions.filter(
+                question => question.id !== questionId
+            );
+            currentAnswers = currentAnswers.filter(
+                answer => answer.question_id !== questionId
+            );
+            // Очищаем редактор
+            editingQuestion = null;
+            editingAnswers = [];
+            editingIsNew = false;
+            questionDetails.innerHTML =
+                "<p class='muted'>Вопрос успешно удалён</p>";
+            // Обновляем список вопросов
+            renderQuestions();
+            setStatus(
+                "Вопрос и все его варианты ответов успешно удалены из Supabase.",
+                false
+            );
+        } catch (error) {
+            console.error("Ошибка удаления вопроса:", error);
+            setStatus(
+                error.message || "Не удалось удалить вопрос.",
+                true
+            );
+            if (deleteButton) {
+                deleteButton.disabled = false;
+                deleteButton.textContent = "Удалить вопрос";
+            }
+        }
+    }
+    
+    // Поиск по вопросам
+    document.getElementById("question-search").addEventListener(
+        "input",
+        renderQuestions
+    );
+    // Открытие формы создания новой группы
+    btnAddGroup.addEventListener("click", function () {
+        openGroupEditor();
+    });
+    // Открытие формы редактирования выбранной группы
+    btnEditGroup.addEventListener("click", function () {
+        if (!currentGroup) {
+            setStatus("Сначала выберите группу для изменения.", true);
+            return;
+        }
+        openGroupEditor(currentGroup);
+    });
+    // Отмена создания или редактирования группы
+    btnCancelGroup.addEventListener("click", function () {
+        closeGroupEditor();
+    });
+    // Сохранение новой или изменённой группы
+    btnSaveGroup.addEventListener("click", async function () {
+        const name = groupNameInput.value.trim();
+        const questionsPerTicket = Number(groupQuestionsCountInput.value);
+        if (!currentTestId) {
+            setStatus("Сначала выберите тест.", true);
+            return;
+        }
+        if (!name) {
+            setStatus("Введите название группы.", true);
+            groupNameInput.focus();
+            return;
+        }
+        if (
+            !Number.isInteger(questionsPerTicket) ||
+            questionsPerTicket < 1
+        ) {
+            setStatus("Количество вопросов в билете должно быть целым числом больше нуля.", true);
+            groupQuestionsCountInput.focus();
+            return;
+        }
+        btnSaveGroup.disabled = true;
+        btnSaveGroup.textContent = "Сохранение...";
+        try {
+            await saveGroupToServer({
+                test_id: currentTestId,
+                group_id: editingGroupId,
+                name: name,
+                questions_per_ticket: questionsPerTicket
+            });
+            closeGroupEditor();
+            setStatus("Группа успешно сохранена.", false);
+            // Перезагружаем список групп
+            const selectedTestButton = testsList.querySelector("button.selected");
+            if (selectedTestButton) {
+                selectedTestButton.click();
+            }
+        } catch (error) {
+            console.error("Ошибка сохранения группы:", error);
+            setStatus(error.message || "Не удалось сохранить группу.", true);
+        } finally {
+            btnSaveGroup.disabled = false;
+            btnSaveGroup.textContent = "Сохранить";
+        }
+    });
+    // Удаление выбранной группы
+    btnDeleteGroup.addEventListener("click", async function () {
+        if (!currentGroup) {
+            setStatus("Сначала выберите группу для удаления.", true);
+            return;
+        }
+        const groupId = currentGroup.id;
+        const groupName = currentGroup.name;
+        const confirmed = confirm(
+            "Вы действительно хотите удалить группу «" +
+            groupName +
+            "» вместе со всеми вопросами и вариантами ответов?\n\n" +
+            "Это действие невозможно отменить."
+        );
+        if (!confirmed) {
+            return;
+        }
+        btnDeleteGroup.disabled = true;
+        btnDeleteGroup.textContent = "Удаление...";
+        setStatus("Удаляем группу и связанные с ней данные...", false);
+        try {
+            const result = await deleteGroupFromServer(groupId);
+            closeGroupEditor();
+            currentGroup = null;
+            currentGroupId = null;
+            const selectedTestButton =
+                testsList.querySelector("button.selected");
+            if (selectedTestButton) {
+                await selectTest(
+                    { id: currentTestId },
+                    selectedTestButton
+                );
+            }
+            setStatus(
+                "Группа «" + groupName +
+                "» успешно удалена. Удалено вопросов: " +
+                (result.deleted_questions ?? 0) + ".",
+                false
+            );
+        } catch (error) {
+            console.error("Ошибка удаления группы:", error);
+            setStatus(
+                error.message || "Не удалось удалить группу.",
+                true
+            );
+        } finally {
+            btnDeleteGroup.textContent = "Удалить группу";
+            btnDeleteGroup.disabled = !currentGroup;
+        }
+    });
+    // Создание нового вопроса
+    document.getElementById("btn-add-question").addEventListener(
+        "click",
+        function () {
+            if (!currentGroupId) {
+                alert("Сначала выберите группу вопросов.");
+                return;
+            }
+            editingQuestion = {
+                id: "new-question-" + Date.now(),
+                question_text: "",
+                sort_order: currentQuestions.length + 1,
+                is_active: true
+            };
+            editingAnswers = [
+                {
+                    id: "new-answer-1",
+                    question_id: editingQuestion.id,
+                    answer_text: "",
+                    is_correct: true,
+                    sort_order: 0
+                },
+                {
+                    id: "new-answer-2",
+                    question_id: editingQuestion.id,
+                    answer_text: "",
+                    is_correct: false,
+                    sort_order: 1
+                }
+            ];
+            editingIsNew = true;
+            renderQuestionEditor();
+        }
+    );
+</script>
+</body>
+</html>

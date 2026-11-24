@@ -178,7 +178,7 @@
     host.appendChild(div);
     div.querySelectorAll('input[type="radio"]').forEach(function (inp) {
       inp.addEventListener("change", function () {
-        state.answers[q.Id] = Number(inp.value);
+        state.answers[q.Id] = inp.value;
         div.querySelectorAll(".ans").forEach(function (l) { l.classList.remove("selected"); });
         inp.closest(".ans").classList.add("selected");
         saveSession();
@@ -312,7 +312,9 @@
       var rightIds = (q.AnswerTemplates || [])
         .filter(function (a) { return a.Score > 0; })
         .map(function (a) { return a.Id; });
-      var isRight = chosenId != null && rightIds.indexOf(chosenId) !== -1;
+      var isRight = chosenId != null && rightIds.some(function (id) {
+        return String(id) === String(chosenId);
+      });
       if (isRight) score++;
       return {
         number: q.Number,
@@ -480,7 +482,6 @@
       }
     });
   }
-
 
   function addToPendingResults(payload, record) {
     var pending = [];
@@ -765,5 +766,8 @@
     syncPendingResults();
   });
 
-  document.addEventListener("DOMContentLoaded", init);
-})();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+}})();
