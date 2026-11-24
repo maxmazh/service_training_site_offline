@@ -12,7 +12,7 @@
         main { padding: 35px 25px; max-width: 1500px; margin: 0 auto; font-weight: 600;}
         h1 { margin-bottom: 25px; }
         button, a { font-weight: 600; }
-        .panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px; }
+        .panel { background: #fff; border: 2px solid #ddd; border-radius: 8px; padding: 18px; }
         #login-panel { max-width: 420px; margin: 50px auto; }
         #login-panel input { display: block; width: 100%; margin: 12px 0; padding: 12px; box-sizing: border-box; }
         .admin-layout { display: grid; grid-template-columns: 240px minmax(280px, 1fr) minmax(300px, 1fr);
@@ -24,7 +24,8 @@
         }
         .item-button:hover { background: #f2f5f8; }
         .group-actions { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
-        .group-actions button { width: 100%; padding: 9px; cursor: pointer; }
+        .group-actions button, #btn-move-group-up, #btn-move-group-down { width: 100%; padding: 9px; cursor: pointer; }
+        #btn-move-group-up { margin-bottom: 7px ;}
         .group-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
         .group-editor { padding: 12px; margin-bottom: 12px; border: 1px solid #ccc; border-radius: 6px; background: #f8f9fa; }
         .group-editor h3 { font-size: 16px; margin: 0 0 12px; }
@@ -41,15 +42,15 @@
         .error { color: #c62828 !important; }
         .success { color: #27823b !important; }
         .question-editor textarea {
-            width: 100%; min-height: 100px; padding: 10px; box-sizing: border-box; resize: vertical;
-            font: inherit; border: 1px solid #ccc; border-radius: 5px;
+            margin-top: 10px; width: 100%; min-height: 100px; padding: 10px; box-sizing: border-box; 
+            resize: vertical; font: inherit; border: 1px solid #ccc; border-radius: 5px;
         }
         .answer-editor { display: grid; grid-template-columns: 24px minmax(0, 1fr) 32px;
             gap: 8px; align-items: center; margin: 10px 0;
         }
         .answer-editor input[type="text"] { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px; }
         .answer-editor input[type="radio"] { width: 18px; height: 18px; }
-        .answer-editor button { padding: 7px; background: #fbeaea; color: #b3261e; }
+        .answer-editor button { padding: 6px; background: #d9505d; color: #fff; border: none; border-radius: 5px; font-size: 21px; }
         .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
         .editor-note { margin-top: 12px; font-size: 12px; color: #777; }
         @media (max-width: 950px) { .admin-layout {
@@ -92,13 +93,18 @@
             <section class="panel">
                 <h2>Тесты</h2>
                 <div id="tests-list">Загрузка...</div>
+                <div style="margin-top: 12px;">
+                    <button id="btn-export-json" type="button">↓ Экспортировать все тесты в JSON</button>
+                </div>
                 <hr style="margin: 18px 0;">
                 <h2>Группы вопросов</h2>
                 <div class="group-actions">
                     <button id="btn-add-group" type="button">+ Добавить группу</button>
                     <button id="btn-edit-group" type="button" disabled>Изменить группу</button>
                     <button id="btn-delete-group" type="button" disabled class="danger">Удалить группу</button>
-                </div>
+                    <!-- <button id="btn-move-group-up" type="button" disabled>↑ Переместить выше</button>
+                    <button id="btn-move-group-down" type="button" disabled>↓ Переместить ниже</button> -->
+                </div>                
                 <div id="group-editor" class="group-editor" hidden>
                     <h3 id="group-editor-title">Новая группа</h3>
                     <label for="group-name">Название группы</label>
@@ -113,6 +119,8 @@
                 <div id="groups-list">
                     <p class="muted">Выберите тест</p>
                 </div>
+                <button id="btn-move-group-up" type="button" disabled>↑ Переместить выше</button>
+                <button id="btn-move-group-down" type="button" disabled>↓ Переместить ниже</button>
             </section>
             <!-- Список вопросов -->
             <section class="panel">
@@ -155,6 +163,9 @@
     const btnAddGroup = document.getElementById("btn-add-group");
     const btnEditGroup = document.getElementById("btn-edit-group");
     const btnDeleteGroup = document.getElementById("btn-delete-group");
+    const btnMoveGroupUp = document.getElementById("btn-move-group-up");
+    const btnMoveGroupDown = document.getElementById("btn-move-group-down");
+    const btnExportJson = document.getElementById("btn-export-json");
 
     const groupEditor = document.getElementById("group-editor");
     const groupEditorTitle = document.getElementById("group-editor-title");
@@ -331,6 +342,60 @@
         return result;
     }
 
+    // Экспорт всех тестов в JSON
+    btnExportJson.addEventListener("click", async () => {
+        try {
+            const user = window.auth.currentUser;
+            if (!user) {
+                throw new Error("Необходимо войти в учётную запись администратора.");
+            }
+            btnExportJson.disabled = true;
+            btnExportJson.textContent = "Подготовка экспорта...";
+            status.textContent = "Экспортируем все тесты...";
+            const token = await user.getIdToken();
+            const response = await fetch(
+                "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+                {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        action: "export_json"
+                    })
+                }
+            );
+            const result = await response.json();
+            if (!response.ok || !result.success || !result.data) {
+                throw new Error(
+                    result.error || "Не удалось экспортировать тесты."
+                );
+            }
+            // Создаём JSON-файл
+            const jsonText = JSON.stringify(result.data, null, 2);
+            const blob = new Blob(
+                [jsonText],
+                { type: "application/json;charset=utf-8" }
+            );
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "tests-export.json";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            status.textContent = "Экспорт успешно завершён. Файл tests-export.json скачан.";
+        } catch (error) {
+            console.error("Ошибка экспорта:", error);
+            status.textContent = error.message || "Ошибка при экспорте тестов.";
+        } finally {
+            btnExportJson.disabled = false;
+            btnExportJson.textContent = "↓ Экспортировать все тесты в JSON";
+        }
+    });
+
     // Удаление группы через Edge Function
     async function deleteGroupFromServer(groupId) {
         const user = window.auth.currentUser;
@@ -361,6 +426,38 @@
         return result;
     }
 
+
+    // Перемещение группы вверх или вниз через Edge Function
+    async function moveGroupToServer(groupId, direction) {
+        const user = window.auth.currentUser;
+        if (!user) {
+            throw new Error("Необходимо войти в учётную запись администратора.");
+        }
+        const token = await user.getIdToken();
+        const response = await fetch(
+            "https://ffspihdjdoidekxutqhf.supabase.co/functions/v1/manage-questions",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    action: "move_group",
+                    group_id: groupId,
+                    direction: direction
+                })
+            }
+        );
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.error || "Не удалось изменить порядок группы."
+            );
+        }
+        return result;
+    }
+    
     // Вход администратора
     loginForm.addEventListener("submit", async function (event) {
         event.preventDefault();
@@ -459,12 +556,18 @@
     }
 
     // Выбор теста и загрузка групп
-    async function selectTest(test, button) {
+    async function selectTest(test, button, preferredGroupId = null) {
         currentTestId = test.id;
         currentGroupId = null;
         currentGroup = null;
+        currentQuestions = [];
+        currentAnswers = [];
+
         btnEditGroup.disabled = true;
         btnDeleteGroup.disabled = true;
+        btnMoveGroupUp.disabled = true;
+        btnMoveGroupDown.disabled = true;
+
         testsList.querySelectorAll("button").forEach(function (item) {
             item.classList.remove("selected");
         });
@@ -487,26 +590,42 @@
             groupsList.innerHTML = "<p class='muted'>Групп нет</p>";
             return;
         }
-        data.forEach(function (group) {
-            const button = document.createElement("button");
-            button.className = "item-button";
-            button.textContent =
+        data.forEach(function (group, index) {
+            const groupButton = document.createElement("button");
+            groupButton.className = "item-button";
+            groupButton.textContent =
                 group.name + " — " + group.questions_per_ticket + " в билете";
-            button.addEventListener("click", function () {
-                selectGroup(group, button);
+            groupButton.addEventListener("click", function () {
+                selectGroup(group, groupButton, index, data.length);
             });
-            groupsList.appendChild(button);
+            groupsList.appendChild(groupButton);
         });
-        const firstButton = groupsList.querySelector("button");
-        if (firstButton) firstButton.click();
+        let targetButton = null;
+        if (preferredGroupId) {
+            const buttons = Array.from(
+                groupsList.querySelectorAll("button")
+            );
+            targetButton = buttons.find(function (item, index) {
+                return data[index].id === preferredGroupId;
+            });
+        }
+        if (!targetButton) {
+            targetButton = groupsList.querySelector("button");
+        }
+        if (targetButton) {
+            targetButton.click();
+        }
     }
 
     // Выбор группы и загрузка вопросов
-    async function selectGroup(group, button) {
+    async function selectGroup(group, button, groupIndex, groupsCount) {
         currentGroupId = group.id;
         currentGroup = group;
         btnEditGroup.disabled = false;
         btnDeleteGroup.disabled = false;
+        // Управление доступностью кнопок перемещения
+        btnMoveGroupUp.disabled = groupIndex === 0;
+        btnMoveGroupDown.disabled = groupIndex === groupsCount - 1;
         groupsList.querySelectorAll("button").forEach(function (item) {
             item.classList.remove("selected");
         });
@@ -640,7 +759,7 @@
         if (!editingQuestion) return;
         let html =
             '<div class="question-editor">' +
-            '<label><strong>Текст вопроса</strong></label>' +
+            '<label>Текст вопроса</label>' +
             '<textarea id="editor-question-text">' +
             escapeHtml(editingQuestion.question_text) +
             '</textarea>' +
@@ -667,10 +786,6 @@
             '<button type="button" id="btn-delete-question" class="danger">' +
             'Удалить вопрос</button>' +
             '</div>' +
-            '<p class="editor-note">' +
-            'Изменения пока применяются только в текущем окне страницы. ' +
-            'Они не сохраняются в Supabase.' +
-            '</p>' +
             '</div>';
         questionDetails.innerHTML = html;
         document.getElementById("btn-add-answer").addEventListener(
@@ -960,6 +1075,88 @@
         } finally {
             btnDeleteGroup.textContent = "Удалить группу";
             btnDeleteGroup.disabled = !currentGroup;
+        }
+    });
+    // Перемещение выбранной группы вверх
+    btnMoveGroupUp.addEventListener("click", async function () {
+        if (!currentGroup || !currentTestId) {
+            setStatus("Сначала выберите группу.", true);
+            return;
+        }
+        const groupId = currentGroup.id;
+        const groupName = currentGroup.name;
+        const selectedTestButton =
+            testsList.querySelector("button.selected");
+        btnMoveGroupUp.disabled = true;
+        btnMoveGroupDown.disabled = true;
+        setStatus("Перемещаем группу выше...", false);
+        try {
+            const result = await moveGroupToServer(groupId, "up");
+            if (!result.moved) {
+                setStatus("Группа уже находится в начале списка.", false);
+                return;
+            }
+            await selectTest(
+                { id: currentTestId },
+                selectedTestButton,
+                groupId
+            );
+            setStatus(
+                "Группа «" + groupName + "» перемещена выше.",
+                false
+            );
+        } catch (error) {
+            console.error("Ошибка перемещения группы:", error);
+            setStatus(
+                error.message || "Не удалось переместить группу.",
+                true
+            );
+            await selectTest(
+                { id: currentTestId },
+                selectedTestButton,
+                groupId
+            );
+        }
+    });
+    // Перемещение выбранной группы вниз
+    btnMoveGroupDown.addEventListener("click", async function () {
+        if (!currentGroup || !currentTestId) {
+            setStatus("Сначала выберите группу.", true);
+            return;
+        }
+        const groupId = currentGroup.id;
+        const groupName = currentGroup.name;
+        const selectedTestButton =
+            testsList.querySelector("button.selected");
+        btnMoveGroupUp.disabled = true;
+        btnMoveGroupDown.disabled = true;
+        setStatus("Перемещаем группу ниже...", false);
+        try {
+            const result = await moveGroupToServer(groupId, "down");
+            if (!result.moved) {
+                setStatus("Группа уже находится в конце списка.", false);
+                return;
+            }
+            await selectTest(
+                { id: currentTestId },
+                selectedTestButton,
+                groupId
+            );
+            setStatus(
+                "Группа «" + groupName + "» перемещена ниже.",
+                false
+            );
+        } catch (error) {
+            console.error("Ошибка перемещения группы:", error);
+            setStatus(
+                error.message || "Не удалось переместить группу.",
+                true
+            );
+            await selectTest(
+                { id: currentTestId },
+                selectedTestButton,
+                groupId
+            );
         }
     });
     // Создание нового вопроса
